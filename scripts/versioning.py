@@ -1,5 +1,4 @@
 import re
-import sys
 from semver import VersionInfo
 from git import Repo
 from optparse import OptionParser

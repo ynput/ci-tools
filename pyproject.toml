@@ -1,0 +1,19 @@
+[tool.poetry]
+name = "ci-tools"
+version = "0.1.0"
+description = ""
+authors = ["Jakub Jezek <jakubjezek001@gmail.com>"]
+readme = "README.md"
+packages = [{include = "ci_tools"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+semver = "^2.13.0"
+GitPython = "^3.1.30"
+PyGithub = "^1.57"
+python-dotenv = "^0.21.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
