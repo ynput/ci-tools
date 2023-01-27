@@ -5,7 +5,7 @@ on:
 
 jobs:
   call-ci-tools-changelog-generator:
-    uses: .github/workflows/generate_changelog.yml@main
+    uses: ynput/ci-tools/.github/workflows/generate_changelog.yml@main
     with:
       milestone: "3.3.0"
       repo-owner: ${{ github.event.repository.owner.login }}
