@@ -17,6 +17,7 @@
 import os
 import requests
 from dotenv import load_dotenv
+import click
 from pprint import pprint
 
 load_dotenv()
@@ -24,6 +25,11 @@ load_dotenv()
 GITHUB_TOKEN = None
 GITHUB_REPOSITORY_OWNER=None
 GITHUB_REPOSITORY_NAME=None
+
+
+@click.group()
+def main():
+    pass
 
 
 def _get_request_header():
@@ -69,7 +75,23 @@ def _run_github_query(query, query_variables):
     return request.json()
 
 
-
+@main.command(
+    name="set-milestone-to-issue",
+    help=(
+        "Assign milestone to issue by ids. "
+        "Returns JSON string with the edited issue"
+    )
+)
+@click.option(
+    "--milestone-id", required=True,
+    help="Milestone ID number > `10`",
+    type=click.INT
+)
+@click.option(
+    "--issue-id", required=True,
+    help="Issue ID number > `10`",
+    type=click.INT
+)
 def assign_milestone_to_issue(milestone_id, issue_id):
     """Assign milestone to issue by ids
 
@@ -97,19 +119,30 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     except requests.exceptions.Timeout as errt:
         raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
 
-    return request.json()
+    print(request.json())
 
 
-def generate_milestone_changelog(milestone_name):
+@main.command(
+    name="get_milestone_changelog",
+    help=(
+        "Generate changelong form input milestone. "
+        "Returns markdown text with changelog"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+def generate_milestone_changelog(milestone):
     """Generate changelog from input milestone
 
     Args:
-        milestone_name (str): milestone name
+        milestone (str): milestone name
     """
     variables = {
         "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
         "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
-        "milestone": milestone_name
+        "milestone": milestone
     }
 
     query = """
@@ -145,5 +178,8 @@ repository(owner: $owner, name: $repo_name) {
     pprint(pull_requests)
 
 
-generate_milestone_changelog("3.3.0")
-assign_milestone_to_issue(9, 31)
+# generate_milestone_changelog("3.3.0")
+# assign_milestone_to_issue(9, 31)
+
+if __name__ == '__main__':
+    main()
