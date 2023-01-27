@@ -122,6 +122,22 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     print(request.json())
 
 
+class PullRequestDescription:
+    title: str
+    body: str
+    url: str
+
+    def __init__(
+        self, title:str, body:str, url:str,
+        *args, **kwargs
+    ) -> None:
+        self.title = title
+        self.body = body
+        self.url = url
+
+    def get_content(self) -> str:
+        return self.body
+
 @main.command(
     name="get-milestone-changelog",
     help=(
@@ -178,13 +194,12 @@ def generate_milestone_changelog(milestone):
 
     print("_" * 100)
     pprint(milestone)
-    pull_requests = _pr["nodes"]
 
-    pprint(pull_requests)
+    for pr_ in _pr["nodes"]:
+        pull = PullRequestDescription(**pr_)
+        print("_" * 100)
+        print(pull.get_content())
 
-
-# generate_milestone_changelog("3.3.0")
-# assign_milestone_to_issue(9, 31)
 
 if __name__ == '__main__':
     main()
