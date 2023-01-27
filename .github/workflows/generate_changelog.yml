@@ -1,7 +1,20 @@
 name: Milestone changelog generator
 
 on:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      milestone:
+        required: true
+        type: string
+      repo-owner:
+        required: true
+        type: string
+      repo-name:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
 
 jobs:
   generate-milestone-changelog:
@@ -48,12 +61,12 @@ jobs:
         id: changelog
         run: |
           source .venv/bin/activate
-          changelog_result=$(python ./scripts/changelog.py get-milestone-changelog --milestone 3.15.0)
+          changelog_result=$(python ./scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
 
           echo "RESULT=$changelog_result" >> GITHUB_OUTPUT
         env:
-          GITHUB_TOKEN: "${{ secrets.GITHUB_TOKEN }}"
-          GITHUB_REPOSITORY_OWNER: ${{ github.event.repository.owner.login }}
-          GITHUB_REPOSITORY_NAME: ${{ github.event.repository.name }}
+          GITHUB_TOKEN: ${{ secrets.token }}
+          GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
+          GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
         run: echo "${{ steps.changelog.outputs.RESULT }}"
