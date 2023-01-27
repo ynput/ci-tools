@@ -62,4 +62,4 @@ jobs:
 
           echo "RESULT=$changelog_result" >> GITHUB_OUTPUT
       - name: Test print the change log result
-        echo "${{ steps.changelog.outputs.RESULT }}"
+        run: echo "${{ steps.changelog.outputs.RESULT }}"
