@@ -123,7 +123,7 @@ def assign_milestone_to_issue(milestone_id, issue_id):
 
 
 @main.command(
-    name="get_milestone_changelog",
+    name="get-milestone-changelog",
     help=(
         "Generate changelong form input milestone. "
         "Returns markdown text with changelog"
@@ -142,39 +142,44 @@ def generate_milestone_changelog(milestone):
     variables = {
         "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
         "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
-        "milestone": milestone
+        "milestone": milestone,
+        "num_prs": 1
     }
 
     query = """
-query ($owner: String!, $repo_name: String!, $milestone: String!)
-{
-repository(owner: $owner, name: $repo_name) {
-    milestones(query: $milestone, first: 1) {
-    nodes{
-        title
-        url
-        pullRequests(states:[OPEN, MERGED], first: 50){
-        nodes{
-            title
-            body
-            state
-            url
+        query (
+            $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
+        ){
+            repository(owner: $owner, name: $repo_name) {
+                milestones(query: $milestone, first: 1) {
+                    nodes{
+                        title
+                        url
+                        number
+                        pullRequests(states:[OPEN, MERGED], first: $num_prs){
+                            nodes{
+                                title
+                                body
+                                state
+                                url
+                            }
+                        }
+                    }
+                }
+            }
         }
-        }
-    }
-    }
-}
-}
-"""
+    """
 
     # Execute the query
     result = _run_github_query(query, variables)
     # Drill down the dictionary
     milestone = result["data"]['repository']['milestones']['nodes'].pop()
     _pr = milestone.pop("pullRequests")
+
     print("_" * 100)
     pprint(milestone)
     pull_requests = _pr["nodes"]
+
     pprint(pull_requests)
 
 
