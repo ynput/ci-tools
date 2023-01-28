@@ -22,7 +22,21 @@ jobs:
 
     steps:
       #----------------------------------------------
-      #       check-out repo and set-up python
+      #      check out to actual workspace repo
+      #----------------------------------------------
+      - name: Checkout
+        uses: actions/checkout@v3
+      #----------------------------------------------
+      #      check out to ci tools repo
+      #----------------------------------------------
+      - name: Checkout CI Tools repo
+        uses: actions/checkout@v3
+        with:
+          repository: ynput/ci-tools
+          ref: main
+          path: ci-tools
+      #----------------------------------------------
+      #      set-up python
       #----------------------------------------------
       - name: Set up python
         id: setup-python
@@ -36,22 +50,21 @@ jobs:
         uses: snok/install-poetry@v1
         with:
             virtualenvs-create: true
-            virtualenvs-in-project: false
-            virtualenvs-path: ~/.venv-changelog
+            virtualenvs-in-project: true
             installer-parallel: true
       #----------------------------------------------
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
-        run: poetry --project-file ${{ github.action_path }}/pyproject.toml install --no-interaction --no-root
+        run: poetry --project-file ./ci-tools/pyproject.toml install --no-interaction --no-root
       #----------------------------------------------
       #              run changelog generator
       #----------------------------------------------
       - name: Run changelog generator
         id: changelog
         run: |
-          source ~/.venv-changelog/bin/activate
-          changelog_result=$(python ${{ github.action_path }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
+          source ./ci-tools/.venv/bin/activate
+          changelog_result=$(python ./ci-tools/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
 
           echo "RESULT=$changelog_result" >> GITHUB_OUTPUT
         env:
