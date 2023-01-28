@@ -192,12 +192,12 @@ def generate_milestone_changelog(milestone):
     milestone = result["data"]['repository']['milestones']['nodes'].pop()
     _pr = milestone.pop("pullRequests")
 
-    print("_" * 100)
-    pprint(milestone)
+    # print("_" * 100)
+    # pprint(milestone)
 
     for pr_ in _pr["nodes"]:
         pull = PullRequestDescription(**pr_)
-        print("_" * 100)
+        # print("_" * 100)
         print(pull.get_content())
 
 
