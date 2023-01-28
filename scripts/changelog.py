@@ -18,6 +18,7 @@ import os
 import requests
 from dotenv import load_dotenv
 import click
+import json
 from pprint import pprint
 
 load_dotenv()
@@ -192,14 +193,16 @@ def generate_milestone_changelog(milestone):
     milestone = result["data"]['repository']['milestones']['nodes'].pop()
     _pr = milestone.pop("pullRequests")
 
-    # print("_" * 100)
-    # pprint(milestone)
-
+    out_dict = {
+        "milestone": milestone,
+        "changelog": []
+    }
     for pr_ in _pr["nodes"]:
         pull = PullRequestDescription(**pr_)
         # print("_" * 100)
-        print(pull.get_content())
+        out_dict["changelog"].append(pull.get_content())
 
+    print(json.dumps(out_dict))
 
 if __name__ == '__main__':
     main()
