@@ -61,7 +61,7 @@ jobs:
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
-        run: poetry --project-file=${{ env.ci-tools-workdir }}/pyproject.toml install --no-interaction --no-root
+        run: poetry --directory=${{ env.ci-tools-workdir }} install --no-interaction
       #----------------------------------------------
       #              run changelog generator
       #----------------------------------------------
