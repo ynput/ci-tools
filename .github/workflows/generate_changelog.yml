@@ -19,13 +19,14 @@ on:
 jobs:
   generate-milestone-changelog:
     runs-on: ubuntu-latest
-
+    env:
+      ci-tools-workdir: ${{ github.workspace }}/ci-tools
     steps:
       #----------------------------------------------
       #      check out to actual workspace repo
       #----------------------------------------------
-      - name: Checkout
-        uses: actions/checkout@v3
+      # - name: Checkout
+      #   uses: actions/checkout@v3
       #----------------------------------------------
       #      check out to ci tools repo
       #----------------------------------------------
@@ -34,7 +35,7 @@ jobs:
         with:
           repository: ynput/ci-tools
           ref: main
-          path: ci-tools
+          path: ./ci-tools
       #----------------------------------------------
       #      set-up python
       #----------------------------------------------
@@ -43,11 +44,15 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+        run: |
+          cd "${{ env.ci-tools-workdir }}"
+          ls -l
       #----------------------------------------------
       #  -----  install & configure poetry  -----
       #----------------------------------------------
       - name: Install Poetry
         uses: snok/install-poetry@v1
+        working-directory: "${{ env.ci-tools-workdir }}"
         with:
             virtualenvs-create: true
             virtualenvs-in-project: true
@@ -56,15 +61,15 @@ jobs:
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
-        run: poetry --project-file ./ci-tools/pyproject.toml install --no-interaction --no-root
+        run: poetry --project-file ${{ env.ci-tools-workdir }}/pyproject.toml install --no-interaction --no-root
       #----------------------------------------------
       #              run changelog generator
       #----------------------------------------------
       - name: Run changelog generator
         id: changelog
         run: |
-          source ./ci-tools/.venv/bin/activate
-          changelog_result=$(python ./ci-tools/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+          changelog_result=$(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
 
           echo "RESULT=$changelog_result" >> GITHUB_OUTPUT
         env:
