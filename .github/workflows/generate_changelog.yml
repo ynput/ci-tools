@@ -44,6 +44,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+      - name: Test CI Tools work dir content
         run: |
           cd "${{ env.ci-tools-workdir }}"
           ls -l
