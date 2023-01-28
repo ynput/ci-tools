@@ -69,7 +69,7 @@ jobs:
         id: changelog
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
-          changelog_result=$(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
+          changelog_result="$(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})"
           echo "RESULT=${changelog_result}" >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
