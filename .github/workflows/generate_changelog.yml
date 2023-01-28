@@ -70,10 +70,10 @@ jobs:
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           changelog_result="$(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})"
-          echo "RESULT=${changelog_result}" >> $GITHUB_OUTPUT
+          echo ${changelog_result} >> $GITHUB_OUTPUT
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
           GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
           GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
-        run: echo "${{ steps.changelog.outputs.RESULT }}"
+        run: echo "${{ steps.changelog.outputs }}"
