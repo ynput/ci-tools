@@ -211,7 +211,7 @@ python-versions = "!=3.0.*,!=3.1.*,!=3.2.*,!=3.3.*,!=3.4.*,>=2.7"
 [metadata]
 lock-version = "1.1"
 python-versions = "^3.10"
-content-hash = "5d1c10bdaeec620ce0652e49902f7161938f197a9b8e4984aeabd50e69183860"
+content-hash = "f23345c8d0ef284e98b5b467a6ead7579a5cedc56b28192edab82655410adda7"
 
 [metadata.files]
 certifi = [
