@@ -20,6 +20,7 @@ from dotenv import load_dotenv
 import click
 import json
 from pprint import pprint
+import tempfile
 
 load_dotenv()
 
@@ -202,7 +203,11 @@ def generate_milestone_changelog(milestone):
         # print("_" * 100)
         out_dict["changelog"].append(pull.get_content())
 
-    print(json.dumps(out_dict))
+    tfile = tempfile.NamedTemporaryFile(mode="w+", delete=False)
+    json.dump(out_dict, tfile)
+    tfile.flush()
+
+    print(tfile.name)
 
 if __name__ == '__main__':
     main()

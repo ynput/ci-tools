@@ -67,14 +67,17 @@ jobs:
       #----------------------------------------------
       - name: Run changelog generator
         id: changelog
-        run: |
-          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
-          echo 'JSON_RESPONSE<<EOF' >> $GITHUB_ENV
-          "$(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})" >> $GITHUB_ENV
-          echo 'EOF' >> $GITHUB_ENV
+        run : |
+          delimiter=$(openssl rand -hex 8)
+          {
+              echo "OUT<<$delimiter"
+              sed -e '$a\' $(python ${{ env.ci-tools-workdir }}/scripts/changelog.py get-milestone-changelog --milestone ${{ inputs.milestone }})
+              echo "$delimiter"
+          } >> "$GITHUB_OUTPUT"
+        shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.token }}
           GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
           GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
-        run: echo "${{ env.JSON_RESPONSE }}"
+        run: echo "${{ steps.changelog.outputs.OUT }}"
