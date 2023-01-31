@@ -132,14 +132,36 @@ class PullRequestDescription:
     url: str
 
     def __init__(
-        self, title:str, body:str, url:str,
-        *args, **kwargs
+        self, title:str, body:str, url:str, number:int,
+        labels:dict, *args, **kwargs
     ) -> None:
         self.title = title
         self.body = body
         self.url = url
+        self.number = number
+        self.labels = labels
 
-    def get_content(self) -> str:
+    def get_url(self) -> str:
+        return f"[{self.number}]({self.url})"
+
+    def get_labels(self) -> list:
+        labels_ = []
+        for label in self.labels["nodes"]:
+            label_ = {
+                "color": f"#{label['color']}",
+                "name": label["name"]
+                        .replace("host: ", "")
+                        .replace("type: ", "")
+                        .capitalize()
+            }
+
+            labels_.append(label_)
+        return labels_
+
+    def get_title(self) -> str:
+        return self.title
+
+    def get_body(self) -> dict:
         processing_headers = {}
         headers = [
             "Brief description",
@@ -177,7 +199,6 @@ class PullRequestDescription:
 def flatten_markdown_paragraph(input, type=None):
     return_list = []
     if isinstance(input, list):
-        print(f"__ type: {type}")
         nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, type) for item in input]))
         return_list.extend(nested_list)
 
@@ -243,6 +264,13 @@ def generate_milestone_changelog(milestone):
                                 body
                                 state
                                 url
+                                number
+                                labels(first: 5){
+                                    nodes{
+                                        name
+                                        color
+                                    }
+                                }
                             }
                         }
                     }
@@ -262,9 +290,14 @@ def generate_milestone_changelog(milestone):
         "changelog": []
     }
     for pr_ in _pr["nodes"]:
+        pprint(pr_)
         pull = PullRequestDescription(**pr_)
-        # print("_" * 100)
-        out_dict["changelog"].append(pull.get_content())
+        out_dict["changelog"].append({
+            "title": pull.get_title(),
+            "body": pull.get_body(),
+            "url": pull.get_url(),
+            "labels": pull.get_labels()
+        })
 
     pprint(out_dict)
 
