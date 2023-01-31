@@ -68,6 +68,7 @@ jobs:
       - name: Run changelog generator
         id: changelog
         run : |
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           delimiter=$(openssl rand -hex 8)
           {
               echo "OUT<<$delimiter"
