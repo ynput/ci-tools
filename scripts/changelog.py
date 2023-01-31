@@ -21,6 +21,8 @@ import click
 import json
 from pprint import pprint
 import tempfile
+import mistune
+import itertools
 
 load_dotenv()
 
@@ -138,7 +140,68 @@ class PullRequestDescription:
         self.url = url
 
     def get_content(self) -> str:
-        return self.body
+        processing_headers = {}
+        headers = [
+            "Brief description",
+            "Description"
+        ]
+        markdown = mistune.create_markdown(renderer="ast")
+        markdown_obj = markdown(self.body)
+
+        # first get all defined headers and its paragraphs
+        actual_header = None
+        for el_ in markdown_obj:
+            if (
+                el_["type"] == "heading"
+                and el_["children"][0]["text"] in headers
+            ):
+                actual_header = el_["children"][0]["text"]
+                processing_headers[actual_header] = []
+            if (
+                el_["type"] == "heading"
+                and el_["children"][0]["text"] not in headers
+            ):
+                break
+            elif (
+                el_["type"] == "paragraph"
+            ):
+                processing_headers[actual_header].append(el_)
+
+        parsed_body = {
+            header: flatten_markdown_paragraph(paragraph)
+            for header, paragraph in processing_headers.items()
+        }
+
+        return parsed_body
+
+def flatten_markdown_paragraph(input, type=None):
+    return_list = []
+    if isinstance(input, list):
+        print(f"__ type: {type}")
+        nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, type) for item in input]))
+        return_list.extend(nested_list)
+
+    if "children" in input:
+        nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, input.get("type")) for item in input["children"]]))
+        if input.get('type') == "paragraph":
+            return_list.append(nested_list)
+        else:
+            return_list.extend(nested_list)
+
+    if "text" in input:
+        text = input["text"]
+
+        # add text style
+        if type == "strong":
+            text = "**" + text + "**"
+
+        # condition for text with line endings
+        if "\n" in text:
+            return_list.extend(text.split("\n"))
+        else:
+            return_list.append(text)
+
+    return return_list
 
 @main.command(
     name="get-milestone-changelog",
@@ -203,7 +266,9 @@ def generate_milestone_changelog(milestone):
         # print("_" * 100)
         out_dict["changelog"].append(pull.get_content())
 
-    tfile = tempfile.NamedTemporaryFile(mode="w+", delete=False)
+    pprint(out_dict)
+
+    tfile = tempfile.NamedTemporaryFile(mode="w+")
     json.dump(out_dict, tfile)
     tfile.flush()
 
