@@ -127,8 +127,9 @@ def assign_milestone_to_issue(milestone_id, issue_id):
 
 
 class PullRequestDescription:
-    _type: str = ""
+    _types: list = []
     _hosts: list = []
+    _modules: list = []
     title: str
     body: str
     url: str
@@ -144,24 +145,41 @@ class PullRequestDescription:
         self.number = number
 
         # set pr type
-        self._define_pr_type(labels)
+        self._define_pr_types(labels)
 
         # set hosts
         self._define_pr_hosts(labels)
 
-    def _define_pr_type(self, labels) -> None:
-        for label in labels["nodes"]:
-            if "type" in label["name"]:
-                self._type = (
-                    label["name"]
-                    .replace("type: ", "")
-                    .lower()
-                )
-                break
+        # set hosts
+        self._define_pr_modules(labels)
 
-    def _define_pr_hosts(self, labels) -> list:
+    def _define_pr_types(self, labels) -> None:
         for label in labels["nodes"]:
-            if "host" not in label["name"]:
+            if "type:" not in label["name"]:
+                continue
+
+            # adding available types from labels
+            self._types.append(
+                label["name"]
+                .replace("type: ", "")
+                .lower()
+            )
+
+    def _define_pr_modules(self, labels) -> None:
+        for label in labels["nodes"]:
+            if "module:" not in label["name"]:
+                continue
+
+            # adding available types from labels
+            self._modules.append(
+                label["name"]
+                .replace("module: ", "")
+                .lower()
+            )
+
+    def _define_pr_hosts(self, labels) -> None:
+        for label in labels["nodes"]:
+            if "host:" not in label["name"]:
                 continue
 
             # adding available hosts from labels
@@ -176,8 +194,12 @@ class PullRequestDescription:
         return self._hosts
 
     @property
-    def type(self):
-        return self._type
+    def modules(self):
+        return self._modules
+
+    @property
+    def types(self):
+        return self._types
 
     def get_url(self) -> str:
         return f"[{self.number}]({self.url})"
@@ -193,6 +215,13 @@ class PullRequestDescription:
         ]
         markdown = mistune.create_markdown(renderer="ast")
         markdown_obj = markdown(self.body)
+        pprint(markdown_obj)
+        test_available_headers = [
+            el_ for el_ in markdown_obj
+            if el_["type"] == "heading" and el_["children"][0]["text"] in headers
+        ]
+        if not test_available_headers:
+            return self.body
 
         # first get all defined headers and its paragraphs
         actual_header = None
@@ -218,6 +247,9 @@ class PullRequestDescription:
             for header, paragraph in processing_headers.items()
         }
 
+        # text = ""
+        # for ln in parsed_body:
+
         return parsed_body
 
 def flatten_markdown_paragraph(input, type=None):
@@ -227,7 +259,14 @@ def flatten_markdown_paragraph(input, type=None):
         return_list.extend(nested_list)
 
     if "children" in input:
-        nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, input.get("type")) for item in input["children"]]))
+        if input.get("type") in ["strong", "emphasis"]:
+            # some reformats are applied to list of inputs
+            nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, input.get("type")) for item in input["children"]]))
+            print(nested_list)
+        else:
+            # other reformats are applied directly
+            nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, item.get("type")) for item in input["children"]]))
+
         if input.get('type') == "paragraph":
             return_list.append(nested_list)
         else:
@@ -235,9 +274,12 @@ def flatten_markdown_paragraph(input, type=None):
 
     if "text" in input:
         text = input["text"]
-
         # add text style
-        if type == "strong":
+        if type == "codespan":
+            text = "`" + text + "`"
+        elif type == "emphasis":
+            text = "_" + text + "_"
+        elif type == "strong":
             text = "**" + text + "**"
 
         # condition for text with line endings
@@ -320,8 +362,9 @@ def generate_milestone_changelog(milestone):
             "title": pull.get_title(),
             "body": pull.get_body(),
             "url": pull.get_url(),
-            "type": pull.type,
-            "hosts": pull.hosts
+            "types": pull.types,
+            "hosts": pull.hosts,
+            "modules": pull.modules
         })
 
     pprint(out_dict)
