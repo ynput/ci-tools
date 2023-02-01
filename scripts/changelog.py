@@ -247,10 +247,16 @@ class PullRequestDescription:
             for header, paragraph in processing_headers.items()
         }
 
-        # text = ""
-        # for ln in parsed_body:
+        text = ""
+        for header, paragraph in parsed_body.items():
+            text += f"## {header}\r\n"
+            if isinstance(paragraph, list):
+                text += """\r\n"""
+                for s_ in paragraph:
+                    text += "".join(s_)
+                text += """\r\n\r\n"""
 
-        return parsed_body
+        return text
 
 def flatten_markdown_paragraph(input, type=None):
     return_list = []
