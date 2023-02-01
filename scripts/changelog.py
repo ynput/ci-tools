@@ -127,9 +127,12 @@ def assign_milestone_to_issue(milestone_id, issue_id):
 
 
 class PullRequestDescription:
+    _type: str = ""
+    _hosts: list = []
     title: str
     body: str
     url: str
+
 
     def __init__(
         self, title:str, body:str, url:str, number:int,
@@ -139,24 +142,45 @@ class PullRequestDescription:
         self.body = body
         self.url = url
         self.number = number
-        self.labels = labels
+
+        # set pr type
+        self._define_pr_type(labels)
+
+        # set hosts
+        self._define_pr_hosts(labels)
+
+    def _define_pr_type(self, labels) -> None:
+        for label in labels["nodes"]:
+            if "type" in label["name"]:
+                self._type = (
+                    label["name"]
+                    .replace("type: ", "")
+                    .lower()
+                )
+                break
+
+    def _define_pr_hosts(self, labels) -> list:
+        for label in labels["nodes"]:
+            if "host" not in label["name"]:
+                continue
+
+            # adding available hosts from labels
+            self._hosts.append(
+                label["name"]
+                .replace("host: ", "")
+                .lower()
+            )
+
+    @property
+    def hosts(self):
+        return self._hosts
+
+    @property
+    def type(self):
+        return self._type
 
     def get_url(self) -> str:
         return f"[{self.number}]({self.url})"
-
-    def get_labels(self) -> list:
-        labels_ = []
-        for label in self.labels["nodes"]:
-            label_ = {
-                "color": f"#{label['color']}",
-                "name": label["name"]
-                        .replace("host: ", "")
-                        .replace("type: ", "")
-                        .capitalize()
-            }
-
-            labels_.append(label_)
-        return labels_
 
     def get_title(self) -> str:
         return self.title
@@ -296,7 +320,8 @@ def generate_milestone_changelog(milestone):
             "title": pull.get_title(),
             "body": pull.get_body(),
             "url": pull.get_url(),
-            "labels": pull.get_labels()
+            "type": pull.type,
+            "hosts": pull.hosts
         })
 
     pprint(out_dict)
