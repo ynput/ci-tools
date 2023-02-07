@@ -14,6 +14,7 @@
     - return change log text for other actions
 """
 
+from copy import deepcopy
 import os
 import requests
 from dotenv import load_dotenv
@@ -30,268 +31,11 @@ GITHUB_TOKEN = None
 GITHUB_REPOSITORY_OWNER=None
 GITHUB_REPOSITORY_NAME=None
 
-class ChangeLogMilestoneProcessor:
-    pulrequest_items_limit = 10
-
-    domain_color = "#FF0000"
-    domain_bold = True
-    domain_cursive = True
-
-    hosts_color = "#089FF5"
-    hosts_bold = True
-    hosts_cursive = True
-
-    modules_color = "#08F582"
-    modules_bold = True
-    modules_cursive = True
-
-    sections = [
-        {
-            "title": "### **🆕 New features**",
-            "label": "feature",
-            "items": []
-        },
-        {
-            "title": "### **🚀 Enhancements**",
-            "label": "enhancement",
-            "items": []
-        },
-        {
-            "title": "### **🐛 Bug fixes**",
-            "label": "bug",
-            "items": []
-        },
-        {
-            "title": "### **🔀 Refactored code**",
-            "label": "refactor",
-            "items": []
-        },
-        {
-            "title": "### **📃 Documentation**",
-            "label": "documentation",
-            "items": []
-        },
-        {
-            "title": "### **Merged pull requests**",
-            "label": "*",
-            "items": []
-        }
-    ]
-    domains = [
-        {"domain": "3d", "hosts": ["maya", "houdini", "unreal"]},
-        {"domain": "2d", "hosts": ["nuke", "fusion"]},
-        {"domain": "editorial", "hosts": ["hiero", "flame", "resolve"]},
-        {"domain": "other", "hosts": ["*"]},
-    ]
-    query = """
-            query (
-                $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
-            ){
-                repository(owner: $owner, name: $repo_name) {
-                    milestones(query: $milestone, first: 1) {
-                        nodes{
-                            title
-                            url
-                            number
-                            pullRequests(states:[OPEN, MERGED], first: $num_prs){
-                                nodes{
-                                    title
-                                    body
-                                    state
-                                    url
-                                    number
-                                    labels(first: 5){
-                                        nodes{
-                                            name
-                                            color
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        """
-
-    def __init__(self, milestone) -> None:
-
-        # Execute the query
-        result = self._run_github_query(milestone)
-
-        # Drill down the dictionary
-        milestone = result["data"]['repository']['milestones']['nodes'].pop()
-        _pr = milestone.pop("pullRequests")
-
-        changelog_data = {
-            "milestone": milestone,
-            "changelog": []
-        }
-        for pr_ in _pr["nodes"]:
-            pull = PullRequestDescription(**pr_)
-            changelog_data["changelog"].append({
-                "title": pull.get_title(),
-                "body": pull.get_body(),
-                "url": pull.get_url(),
-                "types": pull.types,
-                "hosts": pull.hosts,
-                "modules": pull.modules
-            })
-
-        self._populate_sections(changelog_data)
-        self._sort_by_hosts()
-
-    def _run_github_query(self, milestone):
-        """Running query at Github
-
-        Args:
-            milestone (str): milestone name
-
-        Raises:
-            Exception: _description_
-
-        Returns:
-            str: json text
-        """
-        variables = {
-            "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
-            "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
-            "milestone": milestone,
-            "num_prs": self.pulrequest_items_limit
-        }
-
-        try:
-            # A simple function to use requests.post to make
-            # the API call. Note the json= section.
-            request = requests.post(
-                'https://api.github.com/graphql',
-                json={'query': self.query, "variables": variables},
-                headers=_get_request_header(),
-                timeout=3
-            )
-            request.raise_for_status()
-        except requests.exceptions.RequestException as err:
-            raise requests.exceptions.RequestException(f"Request error: {err}")
-        except requests.exceptions.HTTPError as errh:
-            raise requests.exceptions.HTTPError(f"Http Error: {errh}")
-        except requests.exceptions.ConnectionError as errc:
-            raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
-        except requests.exceptions.Timeout as errt:
-            raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
-
-        return request.json()
-
-    def _populate_sections(self, changelog_data):
-        for pr_ in changelog_data["changelog"]:
-            types = pr_["types"]
-            for section in self.sections:
-                # TODO: need to do regex check
-                if section["label"] in types:
-                    section["items"].append(pr_)
-                    break
-
-    def _sort_by_hosts(self):
-        for section in self.sections:
-            new_order = []
-            items = section["items"]
-            for domain_ in self.domains:
-                for host in domain_["hosts"]:
-                    for item in items:
-                        # TODO: regex check `*`
-                        if host in item["hosts"]:
-                            # add domane to item
-                            item["domain"] = domain_["domain"]
-                            # add to reorder
-                            new_order.append(item)
-                            # dont duplicate and remove item
-                            items = [
-                                i_ for i_ in items
-                                if i_["title"] != item["title"]
-                            ]
-
-    def _get_changelog_item_from_template(self, **kwards):
-        pretitle = ""
-        modules_str = ""
-
-        # get pr kwargs
-        domain = kwards.get("domain")
-        title = kwards.get("title")
-        url = kwards.get("url")
-        body = kwards.get("body")
-        hosts = kwards.get("hosts")
-        modules = kwards.get("modules")
-
-        # add domain to pretitle
-        if domain:
-            domain_text = (
-                f"<font color='{self.domain_color}';>"
-                f"[{domain}]</font>"
-            )
-            if self.domain_bold:
-                domain_text = f"<b>{domain_text}</b>"
-            if self.domain_cursive:
-                domain_text = f"<i>{domain_text}</i>"
-
-            pretitle += domain_text + " "
-
-        # add hosts to pretitle
-        hosts_str = ",".join(hosts) if hosts else ""
-        if hosts_str:
-            hosts_text = (
-                f"<font style='color:{self.hosts_color}';>"
-                f"[{hosts_str}]</font>"
-            )
-            if self.hosts_bold:
-                hosts_text = f"<b>{hosts_text}</b>"
-            if self.hosts_cursive:
-                hosts_text = f"<i>{hosts_text}</i>"
-
-            pretitle += hosts_text+ " "
-
-        # add modules to pretitle
-        modules_str = ",".join(modules) if modules else ""
-        if modules_str:
-            modules_text = (
-                f"<font style='color:{self.modules_color}';>"
-                f"[{modules_str}]</font>"
-            )
-            if self.modules_bold:
-                modules_text = f"<b>{modules_text}</b>"
-            if self.modules_cursive:
-                modules_text = f"<i>{modules_text}</i>"
-
-            pretitle += modules_text + " "
-
-        # format template and return
-        return f"""
-<details>
-<summary>{pretitle}{title} - {url}</summary>
-\r\n
-___
-\r\n
-{body}
-\r\n
-___
-\r\n
-</details>\r\n
-"""
-
-    def generate(self):
-        out_text = ""
-        for section in self.sections:
-            if not section["items"]:
-                continue
-            out_text += section["title"] + "\r\n\r\n"
-            for item in section["items"]:
-                out_text += self._get_changelog_item_from_template(**item)
-
-        return out_text
-
-
 
 
 class PullRequestDescription:
     _types: list = []
+    _domain: str = ""
     _hosts: list = []
     _modules: list = []
     title: str
@@ -357,6 +101,14 @@ class PullRequestDescription:
             )
 
     @property
+    def domain(self):
+        return self._domain
+
+    @domain.setter
+    def domain(self, value):
+        self._domain = value
+
+    @property
     def hosts(self):
         return self._hosts
 
@@ -382,7 +134,7 @@ class PullRequestDescription:
         ]
         markdown = mistune.create_markdown(renderer="ast")
         markdown_obj = markdown(self.body)
-        pprint(markdown_obj)
+        # pprint(markdown_obj)
 
         test_available_headers = [
             el_ for el_ in markdown_obj
@@ -490,6 +242,278 @@ class PullRequestDescription:
         return return_list
 
 
+class SectionItems:
+    title: str
+    label: str
+    _pulls: list[PullRequestDescription] = []
+
+    def __init__(self, title, label):
+        self.title = title
+        self.label = label
+        self._pulls = []
+
+    @property
+    def pulls(self):
+        return self._pulls
+
+    @pulls.setter
+    def pulls(self, input_pulls: list[PullRequestDescription]):
+        self._pulls = input_pulls
+
+    def pull_append(self, pull: PullRequestDescription):
+        self._pulls.append(pull)
+
+
+class DomaneItems:
+    name: str = ""
+    hosts: list[str]
+
+    def __init__(self, name, hosts):
+        self.name = name
+        self.hosts = hosts
+
+
+class ChangeLogMilestoneProcessor:
+    pulrequest_items_limit = 10
+
+    domain_color = "#367F6C"
+    domain_bold = False
+    domain_cursive = True
+
+    hosts_color = "#365E7F"
+    hosts_bold = False
+    hosts_cursive = True
+
+    modules_color = "#1E1B7B"
+    modules_bold = False
+    modules_cursive = True
+
+    sections: list[SectionItems] = [
+        SectionItems("### **🆕 New features**", "feature"),
+        SectionItems("### **🚀 Enhancements**", "enhancement"),
+        SectionItems("### **🐛 Bug fixes**", "bug"),
+        SectionItems("### **🔀 Refactored code**", "refactor"),
+        SectionItems("### **📃 Documentation**", "documentation"),
+        SectionItems("### **Merged pull requests**", "*")
+    ]
+    domains: list[DomaneItems] = [
+        DomaneItems("3d", ["maya", "houdini", "unreal"]),
+        DomaneItems("2d", ["nuke", "fusion"]),
+        DomaneItems("editorial", ["hiero", "flame", "resolve"]),
+        DomaneItems("other", ["*"])
+    ]
+
+    query = """
+            query (
+                $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
+            ){
+                repository(owner: $owner, name: $repo_name) {
+                    milestones(query: $milestone, first: 1) {
+                        nodes{
+                            title
+                            url
+                            number
+                            pullRequests(states:[OPEN, MERGED], first: $num_prs){
+                                nodes{
+                                    title
+                                    body
+                                    state
+                                    url
+                                    number
+                                    labels(first: 5){
+                                        nodes{
+                                            name
+                                            color
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        """
+
+    _pullrequests: list[PullRequestDescription] = []
+
+    def __init__(self, milestone) -> None:
+
+        # Execute the query
+        result = self._run_github_query(milestone)
+
+        # Drill down the dictionary
+        milestone_data = result["data"]['repository']['milestones']['nodes'].pop()
+        pullrequest_data = milestone_data.pop("pullRequests")
+        assert pullrequest_data, "Missing PullRequest in Milestone"
+
+        changelog_data = {
+            "milestone": milestone_data,
+            "changelog": []
+        }
+        pprint(changelog_data)
+
+        for pr_ in pullrequest_data["nodes"]:
+            pull = PullRequestDescription(**pr_)
+            self._pullrequests.append(pull)
+
+        self._populate_sections()
+        self._sort_by_hosts()
+
+    def _run_github_query(self, milestone):
+        """Running query at Github
+
+        Args:
+            milestone (str): milestone name
+
+        Raises:
+            Exception: _description_
+
+        Returns:
+            str: json text
+        """
+        variables = {
+            "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
+            "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
+            "milestone": milestone,
+            "num_prs": self.pulrequest_items_limit
+        }
+
+        try:
+            # A simple function to use requests.post to make
+            # the API call. Note the json= section.
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json={'query': self.query, "variables": variables},
+                headers=_get_request_header(),
+                timeout=3
+            )
+            request.raise_for_status()
+        except requests.exceptions.RequestException as err:
+            raise requests.exceptions.RequestException(f"Request error: {err}")
+        except requests.exceptions.HTTPError as errh:
+            raise requests.exceptions.HTTPError(f"Http Error: {errh}")
+        except requests.exceptions.ConnectionError as errc:
+            raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
+        except requests.exceptions.Timeout as errt:
+            raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
+
+        return request.json()
+
+    def _populate_sections(self):
+        for pull in self._pullrequests:
+            for section in self.sections:
+                # TODO: need to do regex check
+                print(section.label, pull.types)
+
+                if section.label in pull.types:
+                    section.pull_append(pull)
+                    print("breaking")
+                    break
+
+        pprint([(s.label, s.pulls) for s in self.sections])
+
+    def _sort_by_hosts(self):
+        for section in self.sections:
+            new_order: list[PullRequestDescription] = []
+            pulls = deepcopy(section.pulls)
+
+            for domain in self.domains:
+                for host in domain.hosts:
+                    for pr_ in pulls:
+                        # TODO: regex check `*`
+                        if host in pr_.hosts:
+                            # add domane to item
+                            pr_.domain = domain.name
+                            # add to reorder
+                            new_order.append(pr_)
+                            # dont duplicate and remove item
+                            pulls = [
+                                p_ for p_ in section.pulls
+                                if p_.title != pr_.title
+                            ]
+
+            section.pulls = new_order
+
+    def _get_changelog_item_from_template(self, pull: PullRequestDescription):
+        tags = ""
+        modules_str = ""
+
+        # get pr kwargs
+        domain = pull.domain
+        title = pull.get_title()
+        url = pull.get_url()
+        body = pull.get_body()
+        hosts = pull.hosts
+        modules = pull.modules
+
+        # add domain to tags
+        if domain:
+            domain_text = (
+                f"<font color='{self.domain_color}';>"
+                f"{domain}</font> "
+            )
+            if self.domain_bold:
+                domain_text = f"<b>{domain_text}</b>"
+            if self.domain_cursive:
+                domain_text = f"<i>{domain_text}</i>"
+
+            tags += domain_text + " "
+
+        # add hosts to tags
+        hosts_str = ",".join(hosts) if hosts else ""
+        if hosts_str:
+            hosts_text = (
+                f"<font style='color:{self.hosts_color}';>"
+                f"/ {hosts_str}</font>"
+            )
+            if self.hosts_bold:
+                hosts_text = f"<b>{hosts_text}</b>"
+            if self.hosts_cursive:
+                hosts_text = f"<i>{hosts_text}</i>"
+
+            tags += hosts_text+ " "
+
+        # add modules to tags
+        modules_str = ",".join(modules) if modules else ""
+        if modules_str:
+            modules_text = (
+                f"<font style='color:{self.modules_color}';>"
+                f"/ {modules_str}</font>"
+            )
+            if self.modules_bold:
+                modules_text = f"<b>{modules_text}</b>"
+            if self.modules_cursive:
+                modules_text = f"<i>{modules_text}</i>"
+
+            tags += modules_text + " "
+
+        # format template and return
+        return f"""
+<details>
+<summary>{title} ({tags}) - {url}</summary>
+\r\n
+___
+\r\n
+{body}
+\r\n
+___
+\r\n
+</details>\r\n
+"""
+
+    def generate(self):
+        out_text = ""
+        for section in self.sections:
+            if not section.pulls:
+                continue
+
+            out_text += section.title + "\r\n\r\n"
+            for pull in section.pulls:
+                out_text += self._get_changelog_item_from_template(pull)
+
+        return out_text
+
+
 def _get_request_header():
     github_token = GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
 
@@ -545,7 +569,7 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     except requests.exceptions.Timeout as errt:
         raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
 
-    print(request.json())
+    # print(request.json())
 
 @main.command(
     name="get-milestone-changelog",
@@ -567,7 +591,7 @@ def generate_milestone_changelog(milestone):
     # sort and devide PRs by labels
     changelog = ChangeLogMilestoneProcessor(milestone)
     changelong_str = changelog.generate()
-    print(changelong_str)
+    # print(changelong_str)
 
     tfile = tempfile.NamedTemporaryFile(mode="w+", encoding="UTF-8")
     tfile.close()
@@ -577,13 +601,6 @@ def generate_milestone_changelog(milestone):
         file.close()
 
     print(tfile.name)
-    # assert os.path.isfile(tfile.name)
-
-    # with open(tfile.name, "r+", encoding="UTF-8") as file:
-    #     lines = file.readlines()
-    #     pprint(lines)
-
-
 
 
 if __name__ == '__main__':
