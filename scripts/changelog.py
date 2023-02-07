@@ -30,7 +30,21 @@ GITHUB_TOKEN = None
 GITHUB_REPOSITORY_OWNER=None
 GITHUB_REPOSITORY_NAME=None
 
-class ChangeLogConfig:
+class ChangeLogMilestoneProcessor:
+    pulrequest_items_limit = 10
+
+    domain_color = "#FF0000"
+    domain_bold = True
+    domain_cursive = True
+
+    hosts_color = "#089FF5"
+    hosts_bold = True
+    hosts_cursive = True
+
+    modules_color = "#08F582"
+    modules_bold = True
+    modules_cursive = True
+
     sections = [
         {
             "title": "### **🆕 New features**",
@@ -69,10 +83,103 @@ class ChangeLogConfig:
         {"domain": "editorial", "hosts": ["hiero", "flame", "resolve"]},
         {"domain": "other", "hosts": ["*"]},
     ]
+    query = """
+            query (
+                $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
+            ){
+                repository(owner: $owner, name: $repo_name) {
+                    milestones(query: $milestone, first: 1) {
+                        nodes{
+                            title
+                            url
+                            number
+                            pullRequests(states:[OPEN, MERGED], first: $num_prs){
+                                nodes{
+                                    title
+                                    body
+                                    state
+                                    url
+                                    number
+                                    labels(first: 5){
+                                        nodes{
+                                            name
+                                            color
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        """
 
-    def __init__(self, changelog_data) -> None:
+    def __init__(self, milestone) -> None:
+
+        # Execute the query
+        result = self._run_github_query(milestone)
+
+        # Drill down the dictionary
+        milestone = result["data"]['repository']['milestones']['nodes'].pop()
+        _pr = milestone.pop("pullRequests")
+
+        changelog_data = {
+            "milestone": milestone,
+            "changelog": []
+        }
+        for pr_ in _pr["nodes"]:
+            pull = PullRequestDescription(**pr_)
+            changelog_data["changelog"].append({
+                "title": pull.get_title(),
+                "body": pull.get_body(),
+                "url": pull.get_url(),
+                "types": pull.types,
+                "hosts": pull.hosts,
+                "modules": pull.modules
+            })
+
         self._populate_sections(changelog_data)
         self._sort_by_hosts()
+
+    def _run_github_query(self, milestone):
+        """Running query at Github
+
+        Args:
+            milestone (str): milestone name
+
+        Raises:
+            Exception: _description_
+
+        Returns:
+            str: json text
+        """
+        variables = {
+            "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
+            "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
+            "milestone": milestone,
+            "num_prs": self.pulrequest_items_limit
+        }
+
+        try:
+            # A simple function to use requests.post to make
+            # the API call. Note the json= section.
+            request = requests.post(
+                'https://api.github.com/graphql',
+                json={'query': self.query, "variables": variables},
+                headers=_get_request_header(),
+                timeout=3
+            )
+            request.raise_for_status()
+        except requests.exceptions.RequestException as err:
+            raise requests.exceptions.RequestException(f"Request error: {err}")
+        except requests.exceptions.HTTPError as errh:
+            raise requests.exceptions.HTTPError(f"Http Error: {errh}")
+        except requests.exceptions.ConnectionError as errc:
+            raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
+        except requests.exceptions.Timeout as errt:
+            raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
+
+        return request.json()
 
     def _populate_sections(self, changelog_data):
         for pr_ in changelog_data["changelog"]:
@@ -104,7 +211,6 @@ class ChangeLogConfig:
 
     def _get_changelog_item_from_template(self, **kwards):
         pretitle = ""
-        hosts_str = ""
         modules_str = ""
 
         # get pr kwargs
@@ -115,18 +221,48 @@ class ChangeLogConfig:
         hosts = kwards.get("hosts")
         modules = kwards.get("modules")
 
+        # add domain to pretitle
         if domain:
-            pretitle += f"[{domain}]"
-        if hosts:
-            hosts_str = ",".join(hosts)
-        if modules:
-            modules_str = ",".join(modules)
+            domain_text = (
+                f"<font color='{self.domain_color}';>"
+                f"[{domain}]</font>"
+            )
+            if self.domain_bold:
+                domain_text = f"<b>{domain_text}</b>"
+            if self.domain_cursive:
+                domain_text = f"<i>{domain_text}</i>"
 
+            pretitle += domain_text + " "
+
+        # add hosts to pretitle
+        hosts_str = ",".join(hosts) if hosts else ""
         if hosts_str:
-            pretitle += f"[{hosts_str}] "
-        if modules_str:
-            pretitle += f"[{modules_str}] "
+            hosts_text = (
+                f"<font style='color:{self.hosts_color}';>"
+                f"[{hosts_str}]</font>"
+            )
+            if self.hosts_bold:
+                hosts_text = f"<b>{hosts_text}</b>"
+            if self.hosts_cursive:
+                hosts_text = f"<i>{hosts_text}</i>"
 
+            pretitle += hosts_text+ " "
+
+        # add modules to pretitle
+        modules_str = ",".join(modules) if modules else ""
+        if modules_str:
+            modules_text = (
+                f"<font style='color:{self.modules_color}';>"
+                f"[{modules_str}]</font>"
+            )
+            if self.modules_bold:
+                modules_text = f"<b>{modules_text}</b>"
+            if self.modules_cursive:
+                modules_text = f"<i>{modules_text}</i>"
+
+            pretitle += modules_text + " "
+
+        # format template and return
         return f"""
 <details>
 <summary>{pretitle}{title} - {url}</summary>
@@ -152,101 +288,6 @@ ___
         return out_text
 
 
-
-
-@click.group()
-def main():
-    pass
-
-
-def _get_request_header():
-    github_token = GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
-
-    return {"Authorization": f"Bearer {github_token}"}
-
-
-def _run_github_query(query, query_variables):
-    """Running query at Github
-
-    Args:
-        query (str): query text
-        query_variables (dict): variables used inside of query
-
-    Raises:
-        Exception: _description_
-
-    Returns:
-        str: json text
-    """
-
-
-    try:
-        # A simple function to use requests.post to make
-        # the API call. Note the json= section.
-        request = requests.post(
-            'https://api.github.com/graphql',
-            json={'query': query, "variables": query_variables},
-            headers=_get_request_header(),
-            timeout=3
-        )
-        request.raise_for_status()
-    except requests.exceptions.RequestException as err:
-        raise requests.exceptions.RequestException(f"Request error: {err}")
-    except requests.exceptions.HTTPError as errh:
-        raise requests.exceptions.HTTPError(f"Http Error: {errh}")
-    except requests.exceptions.ConnectionError as errc:
-        raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
-    except requests.exceptions.Timeout as errt:
-        raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
-
-    return request.json()
-
-
-@main.command(
-    name="set-milestone-to-issue",
-    help=(
-        "Assign milestone to issue by ids. "
-        "Returns JSON string with the edited issue"
-    )
-)
-@click.option(
-    "--milestone-id", required=True,
-    help="Milestone ID number > `10`",
-    type=click.INT
-)
-@click.option(
-    "--issue-id", required=True,
-    help="Issue ID number > `10`",
-    type=click.INT
-)
-def assign_milestone_to_issue(milestone_id, issue_id):
-    """Assign milestone to issue by ids
-
-    Args:
-        milestone_id (int): milestone number id
-        issue_id (int): issue milestone id
-    """
-    owner =  GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
-    repo_name = GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME")
-
-    try:
-        request = requests.patch(
-            url=f"https://api.github.com/repos/{owner}/{repo_name}/issues/{issue_id}",
-            data=f"{{\"milestone\": {milestone_id}}}",
-            headers=_get_request_header(),
-            timeout=3
-        )
-        request.raise_for_status()
-    except requests.exceptions.RequestException as err:
-        raise requests.exceptions.RequestException(f"Request error: {err}")
-    except requests.exceptions.HTTPError as errh:
-        raise requests.exceptions.HTTPError(f"Http Error: {errh}")
-    except requests.exceptions.ConnectionError as errc:
-        raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
-    except requests.exceptions.Timeout as errt:
-        raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
-
-    print(request.json())
 
 
 class PullRequestDescription:
@@ -370,7 +411,7 @@ class PullRequestDescription:
                 processing_headers[actual_header].append(el_)
 
         parsed_body = {
-            header: flatten_markdown_paragraph(paragraph)
+            header: self._flatten_markdown_paragraph(paragraph)
             for header, paragraph in processing_headers.items()
         }
 
@@ -385,52 +426,126 @@ class PullRequestDescription:
 
         return text
 
-def flatten_markdown_paragraph(input, type_=None):
-    if isinstance(input, dict):
-        type_ = type_ or input.get("type")
 
-    return_list = []
-    if isinstance(input, list):
-        nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, type_) for item in input]))
-        return_list.extend(nested_list)
+    def _flatten_markdown_paragraph(self, input, type_=None):
+        if isinstance(input, dict):
+            type_ = type_ or input.get("type")
 
-    if "children" in input:
-        if input.get("type") in ["strong", "emphasis", "list_item", "list"]:
-            # some reformats are applied to list of inputs
-            nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, input.get("type")) for item in input["children"]]))
-        else:
-            # other reformats are applied directly
-            nested_list = list(itertools.chain(*[flatten_markdown_paragraph(item, item.get("type")) for item in input["children"]]))
-
-        if input.get('type') == "paragraph":
-            return_list.append(nested_list)
-        elif input.get("type") == "block_text":
-            return_list.extend(("\r\n- ", nested_list))
-        else:
+        return_list = []
+        if isinstance(input, list):
+            nested_list = list(
+                itertools.chain(*[
+                    self._flatten_markdown_paragraph(item, type_)
+                    for item in input
+                ])
+            )
             return_list.extend(nested_list)
 
-    if "text" in input:
-        text = input["text"]
-        # add text style
-        if type_ == "codespan":
-            text = "`" + text + "`"
-        elif type_ == "emphasis":
-            text = "_" + text + "_"
-        elif type_ == "strong":
-            text = "**" + text + "**"
-        elif type_ == "block_code":
-            info = input.get("info")
-            if info:
-                text = f"\r\n\r\n```{info}\r\n" + text.replace("\n", "\r\n") + "```"
+        if "children" in input:
+            if input.get("type") in ["strong", "emphasis", "list_item", "list"]:
+                # some reformats are applied to list of inputs
+                nested_list = list(
+                    itertools.chain(*[
+                        self._flatten_markdown_paragraph(item, input.get("type"))
+                        for item in input["children"]
+                    ])
+                )
             else:
-                text = f"```\r\n" + text.replace("\n", "\r\n") + "```"
-        # condition for text with line endings
-        if "\n" in text and type_ != "block_code":
-            return_list.extend(text.split("\n"))
-        else:
-            return_list.append(text)
+                # other reformats are applied directly
+                nested_list = list(
+                    itertools.chain(*[
+                        self._flatten_markdown_paragraph(item, item.get("type"))
+                        for item in input["children"]
+                    ])
+                )
 
-    return return_list
+            if input.get('type') == "paragraph":
+                return_list.append(nested_list)
+            elif input.get("type") == "block_text":
+                return_list.extend(("\r\n- ", nested_list))
+            else:
+                return_list.extend(nested_list)
+
+        if "text" in input:
+            text = input["text"]
+            # add text style
+            if type_ == "codespan":
+                text = "`" + text + "`"
+            elif type_ == "emphasis":
+                text = "_" + text + "_"
+            elif type_ == "strong":
+                text = "**" + text + "**"
+            elif type_ == "block_code":
+                info = input.get("info")
+                if info:
+                    text = f"\r\n\r\n```{info}\r\n" + text.replace("\n", "\r\n") + "```"
+                else:
+                    text = f"```\r\n" + text.replace("\n", "\r\n") + "```"
+            # condition for text with line endings
+            if "\n" in text and type_ != "block_code":
+                return_list.extend(text.split("\n"))
+            else:
+                return_list.append(text)
+
+        return return_list
+
+
+def _get_request_header():
+    github_token = GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
+
+    return {"Authorization": f"Bearer {github_token}"}
+
+
+@click.group()
+def main():
+    pass
+
+
+@main.command(
+    name="set-milestone-to-issue",
+    help=(
+        "Assign milestone to issue by ids. "
+        "Returns JSON string with the edited issue"
+    )
+)
+@click.option(
+    "--milestone-id", required=True,
+    help="Milestone ID number > `10`",
+    type=click.INT
+)
+@click.option(
+    "--issue-id", required=True,
+    help="Issue ID number > `10`",
+    type=click.INT
+)
+def assign_milestone_to_issue(milestone_id, issue_id):
+    """Assign milestone to issue by ids
+
+    Args:
+        milestone_id (int): milestone number id
+        issue_id (int): issue milestone id
+    """
+    owner =  GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
+    repo_name = GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME")
+
+    try:
+        request = requests.patch(
+            url=f"https://api.github.com/repos/{owner}/{repo_name}/issues/{issue_id}",
+            data=f"{{\"milestone\": {milestone_id}}}",
+            headers=_get_request_header(),
+            timeout=3
+        )
+        request.raise_for_status()
+    except requests.exceptions.RequestException as err:
+        raise requests.exceptions.RequestException(f"Request error: {err}")
+    except requests.exceptions.HTTPError as errh:
+        raise requests.exceptions.HTTPError(f"Http Error: {errh}")
+    except requests.exceptions.ConnectionError as errc:
+        raise requests.exceptions.ConnectionError(f"Error Connecting: {errc}")
+    except requests.exceptions.Timeout as errt:
+        raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
+
+    print(request.json())
 
 @main.command(
     name="get-milestone-changelog",
@@ -449,75 +564,24 @@ def generate_milestone_changelog(milestone):
     Args:
         milestone (str): milestone name
     """
-    variables = {
-        "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
-        "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
-        "milestone": milestone,
-        "num_prs": 10
-    }
-
-    query = """
-        query (
-            $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
-        ){
-            repository(owner: $owner, name: $repo_name) {
-                milestones(query: $milestone, first: 1) {
-                    nodes{
-                        title
-                        url
-                        number
-                        pullRequests(states:[OPEN, MERGED], first: $num_prs){
-                            nodes{
-                                title
-                                body
-                                state
-                                url
-                                number
-                                labels(first: 5){
-                                    nodes{
-                                        name
-                                        color
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    """
-
-    # Execute the query
-    result = _run_github_query(query, variables)
-    # Drill down the dictionary
-    milestone = result["data"]['repository']['milestones']['nodes'].pop()
-    _pr = milestone.pop("pullRequests")
-
-    changelog_data = {
-        "milestone": milestone,
-        "changelog": []
-    }
-    for pr_ in _pr["nodes"]:
-        pprint(pr_)
-        pull = PullRequestDescription(**pr_)
-        changelog_data["changelog"].append({
-            "title": pull.get_title(),
-            "body": pull.get_body(),
-            "url": pull.get_url(),
-            "types": pull.types,
-            "hosts": pull.hosts,
-            "modules": pull.modules
-        })
-
     # sort and devide PRs by labels
-    changelog = ChangeLogConfig(changelog_data)
-    print(changelog.generate())
+    changelog = ChangeLogMilestoneProcessor(milestone)
+    changelong_str = changelog.generate()
+    print(changelong_str)
 
-    tfile = tempfile.NamedTemporaryFile(mode="w+")
-    json.dump(changelog_data, tfile)
-    tfile.flush()
+    tfile = tempfile.NamedTemporaryFile(mode="w+", encoding="UTF-8")
+    tfile.close()
+
+    with open(tfile.name, mode="w+", encoding="UTF-8") as file:
+        file.write(changelong_str)
+        file.close()
 
     print(tfile.name)
+    # assert os.path.isfile(tfile.name)
+
+    # with open(tfile.name, "r+", encoding="UTF-8") as file:
+    #     lines = file.readlines()
+    #     pprint(lines)
 
 
 
