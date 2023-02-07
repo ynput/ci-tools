@@ -1,0 +1,16 @@
+name: (Test) Milestone Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+      steps:
+      - name: 🚛 Checkout Code
+      uses: actions/checkout@v2
+      with:
+        fetch-depth: 0
+      - name: Test print
+        run: |
+          echo "${GITHUB_REF#refs/*/}"
