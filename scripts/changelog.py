@@ -20,7 +20,6 @@ import requests
 from dotenv import load_dotenv
 import click
 import json
-from pprint import pprint
 import tempfile
 import mistune
 import itertools
@@ -134,7 +133,6 @@ class PullRequestDescription:
         ]
         markdown = mistune.create_markdown(renderer="ast")
         markdown_obj = markdown(self.body)
-        # pprint(markdown_obj)
 
         test_available_headers = [
             el_ for el_ in markdown_obj
@@ -350,7 +348,6 @@ class ChangeLogMilestoneProcessor:
             "milestone": milestone_data,
             "changelog": []
         }
-        pprint(changelog_data)
 
         for pr_ in pullrequest_data["nodes"]:
             pull = PullRequestDescription(**pr_)
@@ -403,14 +400,9 @@ class ChangeLogMilestoneProcessor:
         for pull in self._pullrequests:
             for section in self.sections:
                 # TODO: need to do regex check
-                print(section.label, pull.types)
-
                 if section.label in pull.types:
                     section.pull_append(pull)
-                    print("breaking")
                     break
-
-        pprint([(s.label, s.pulls) for s in self.sections])
 
     def _sort_by_hosts(self):
         for section in self.sections:
@@ -569,7 +561,6 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     except requests.exceptions.Timeout as errt:
         raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
 
-    # print(request.json())
 
 @main.command(
     name="get-milestone-changelog",
@@ -591,7 +582,6 @@ def generate_milestone_changelog(milestone):
     # sort and devide PRs by labels
     changelog = ChangeLogMilestoneProcessor(milestone)
     changelong_str = changelog.generate()
-    # print(changelong_str)
 
     tfile = tempfile.NamedTemporaryFile(mode="w+", encoding="UTF-8")
     tfile.close()
