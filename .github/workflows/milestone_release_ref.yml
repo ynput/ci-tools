@@ -30,6 +30,9 @@ jobs:
     env:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
     steps:
+      #----------------------------------------------
+      #      switch between secret inputs
+      #----------------------------------------------
       - name: Set secret switch
         uses: haya14busa/action-cond@v1
         id: secretToken
@@ -37,11 +40,7 @@ jobs:
           cond: ${{ secrets.token != '' }}
           if_true: ${{ secrets.token }}
           if_false: ${{ secrets.YNPUT_BOT_TOKEN }}
-      #----------------------------------------------
-      #      check out to actual workspace repo
-      #----------------------------------------------
-      # - name: Checkout
-      #   uses: actions/checkout@v3
+
       #----------------------------------------------
       #      check out to ci tools repo
       #----------------------------------------------
@@ -51,6 +50,7 @@ jobs:
           repository: ynput/ci-tools
           ref: main
           path: ./ci-tools
+
       #----------------------------------------------
       #      set-up python
       #----------------------------------------------
@@ -63,6 +63,7 @@ jobs:
         run: |
           cd "${{ env.ci-tools-workdir }}"
           ls -l
+
       #----------------------------------------------
       #  -----  install & configure poetry  -----
       #----------------------------------------------
@@ -72,11 +73,30 @@ jobs:
             virtualenvs-create: true
             virtualenvs-in-project: true
             installer-parallel: true
+
       #----------------------------------------------
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
         run: poetry --directory=${{ env.ci-tools-workdir }} install --no-interaction
+
+      # PYTHON milestone.py (step)
+      # is milestone `next-patch` or `next-minor`
+      #    if true:
+      #     - get latest semver from tags (path/minor)
+      #     - rename milestone (if not pre-release)
+      #
+      # is commit hash attribute in milestone description
+      #     if false:
+      #     - checkout to main (owner/name) (step)
+      #     - merge latest develop to main (step)
+      #     - get hash from latest main commit (bash git)
+      #     - set to milestone description (python)
+      #     - set DueDate to milestone (python)
+      #     if true:
+      #     - get hash (python)
+      #     - checkout to the hash (owner/name) (step)
+
       #----------------------------------------------
       #              run changelog generator
       #----------------------------------------------
