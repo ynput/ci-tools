@@ -30,6 +30,13 @@ jobs:
     env:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
     steps:
+      - name: Set secret switch
+        uses: haya14busa/action-cond@v1
+        id: secretToken
+        with:
+          cond: ${{ secrets.token != '' }}
+          if_true: ${{ secrets.token }}
+          if_false: ${{ secrets.YNPUT_BOT_TOKEN }}
       #----------------------------------------------
       #      check out to actual workspace repo
       #----------------------------------------------
@@ -85,10 +92,9 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ fromJSON('[secrets.YNPUT_BOT_TOKEN, secrets.token]')[secrets.token != ''] }}
+          GITHUB_TOKEN: "${{ steps.secretToken.outputs.value }}"
           GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
           GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
         run: |
           echo "${{ steps.changelog.outputs.OUT }}"
-          echo ${{ fromJSON('["ynputBotToken", "secretsToken"]')[secrets.token != ''] }}
