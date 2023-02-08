@@ -1,6 +1,7 @@
 name: Milestone changelog generator
 
 on:
+  workflow_dispatch:
   workflow_call:
     inputs:
       milestone:
