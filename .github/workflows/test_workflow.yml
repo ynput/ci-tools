@@ -22,6 +22,7 @@ jobs:
 
     steps:
     - name: Set variable switch
+      uses: haya14busa/action-cond@v1
       id: secretToken
       with:
         cond: ${{ github.event.inputs.test != '' }}
