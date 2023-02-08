@@ -1,4 +1,4 @@
-name: Milestone release [backend]
+name: Milestone release [ref]
 
 on:
   workflow_dispatch:
