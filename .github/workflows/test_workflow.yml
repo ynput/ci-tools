@@ -21,7 +21,13 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: Set variable switch
+      id: secretToken
+      with:
+        cond: ${{ github.event.inputs.test != '' }}
+        if_true: ${{ github.event.inputs.name }}  # string value
+        if_false: ${{ github.event.inputs.message }} # string value
     - name: Send greeting
       run: |
         echo "${{ github.event.inputs.message }} ${{ fromJSON('[":)", ":("]')[github.event.inputs.use-emoji == 'true'] }} ${{ github.event.inputs.name }}"
-        echo "${{ fromJSON('[${{ github.event.inputs.name }}, ${{ github.event.inputs.message }}]')[github.event.inputs.test != ''] }}"
+        echo "${{ steps.secretToken.outputs.value }}"
