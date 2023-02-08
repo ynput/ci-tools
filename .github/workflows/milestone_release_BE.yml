@@ -1,4 +1,4 @@
-name: Milestone changelog generator
+name: Milestone release [backend]
 
 on:
   workflow_dispatch:
