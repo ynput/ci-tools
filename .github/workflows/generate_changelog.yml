@@ -2,6 +2,13 @@ name: Milestone changelog generator
 
 on:
   workflow_dispatch:
+    inputs:
+      milestone:
+        required: true
+      repo-owner:
+        required: true
+      repo-name:
+        required: true
   workflow_call:
     inputs:
       milestone:
@@ -13,9 +20,6 @@ on:
       repo-name:
         required: true
         type: string
-    secrets:
-      token:
-        required: true
 
 jobs:
   generate-milestone-changelog:
@@ -78,7 +82,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.token }}
+          GITHUB_TOKEN: ${{ secrets.YNPUT_BOT_TOKEN }}
           GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
           GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
