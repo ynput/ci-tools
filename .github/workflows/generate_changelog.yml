@@ -20,6 +20,9 @@ on:
       repo-name:
         required: true
         type: string
+    secrets:
+      token:
+        required: true
 
 jobs:
   generate-milestone-changelog:
@@ -82,8 +85,10 @@ jobs:
           } >> "$GITHUB_OUTPUT"
         shell: bash
         env:
-          GITHUB_TOKEN: ${{ secrets.YNPUT_BOT_TOKEN }}
+          GITHUB_TOKEN: ${{ fromJSON('[secrets.YNPUT_BOT_TOKEN, secrets.token]')[secrets.token != ''] }}
           GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
           GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       - name: Test print the change log result
-        run: echo "${{ steps.changelog.outputs.OUT }}"
+        run: |
+          echo "${{ steps.changelog.outputs.OUT }}"
+          echo ${{ fromJSON('["ynputBotToken", "secretsToken"]')[secrets.token != ''] }}
