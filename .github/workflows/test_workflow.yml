@@ -24,4 +24,4 @@ jobs:
     - name: Send greeting
       run: |
         echo "${{ github.event.inputs.message }} ${{ fromJSON('[":)", ":("]')[github.event.inputs.use-emoji == 'true'] }} ${{ github.event.inputs.name }}"
-        echo "${{ fromJSON('["${{ github.event.inputs.name }}", "${{ github.event.inputs.message }}"]')[github.event.inputs.test != ''] }}"
+        echo "${{ fromJSON('[${{ github.event.inputs.name }}, ${{ github.event.inputs.message }}]')[github.event.inputs.test != ''] }}"
