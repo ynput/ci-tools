@@ -44,15 +44,20 @@ def _install_pyenv_version(pyenv_executable, pyproj_pyversion):
 
 
 def _filter_versions(versions, test_version):
+    # in case of ">=3.9.1,<3.10"
     if "," in test_version:
-        split = test_version.split(",")
-        test_version = re.sub("[\^<>=]", "", split[-1])
+        test_version = test_version.split(",")[-1]
+
+    # remove all symbols and keep only semver
+    test_version = re.sub("[\^<>=]", "", test_version)
+
+    # lets add .* at the and if there is not
+    # so in next step we replace it with number search
     if "*" not in test_version:
         test_version += ".*"
-    if "^" in test_version:
-        test_version = test_version.replace("^", "")
 
     printer.echo(f"Testing version: {test_version}")
+
     test_version = test_version.replace("*", "[\\d]+")
     regex = f"({test_version})"
     match_versions = []
