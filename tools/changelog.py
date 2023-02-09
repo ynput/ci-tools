@@ -23,6 +23,7 @@ import json
 import tempfile
 import mistune
 import itertools
+from pprint import pformat
 
 load_dotenv()
 
@@ -59,6 +60,9 @@ class PullRequestDescription:
 
         # set hosts
         self._define_pr_modules(labels)
+
+    def __repr__(self) -> str:
+        return f"<PullRequestDescription('{self.url}')>"
 
     def _define_pr_types(self, labels) -> None:
         self._types = []
@@ -250,6 +254,9 @@ class SectionItems:
         self.label = label
         self._pulls = []
 
+    def __repr__(self) -> str:
+        return f"<SectionItems('{self.label}')>"
+
     @property
     def pulls(self):
         return self._pulls
@@ -269,6 +276,9 @@ class DomaneItems:
     def __init__(self, name, hosts):
         self.name = name
         self.hosts = hosts
+
+    def __repr__(self) -> str:
+        return f"<DomaneItems('{self.name}')>"
 
 
 class ChangeLogMilestoneProcessor:
@@ -344,14 +354,11 @@ class ChangeLogMilestoneProcessor:
         pullrequest_data = milestone_data.pop("pullRequests")
         assert pullrequest_data, "Missing PullRequest in Milestone"
 
-        changelog_data = {
-            "milestone": milestone_data,
-            "changelog": []
-        }
-
         for pr_ in pullrequest_data["nodes"]:
             pull = PullRequestDescription(**pr_)
             self._pullrequests.append(pull)
+
+        click.echo(f"Collected PRs {pformat(self._pullrequests)}")
 
         self._populate_sections()
         self._sort_by_hosts()
@@ -512,12 +519,7 @@ def _get_request_header():
     return {"Authorization": f"Bearer {github_token}"}
 
 
-@click.group()
-def main():
-    pass
-
-
-@main.command(
+@click.command(
     name="set-milestone-to-issue",
     help=(
         "Assign milestone to issue by ids. "
@@ -541,7 +543,9 @@ def assign_milestone_to_issue(milestone_id, issue_id):
         milestone_id (int): milestone number id
         issue_id (int): issue milestone id
     """
-    owner =  GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
+    click.echo("Assigning milestone to issue by ids...")
+
+    owner = GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
     repo_name = GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME")
 
     try:
@@ -562,8 +566,8 @@ def assign_milestone_to_issue(milestone_id, issue_id):
         raise requests.exceptions.Timeout(f"Timeout Error: {errt}")
 
 
-@main.command(
-    name="get-milestone-changelog",
+@click.command(
+    name="generate-milestone-changelog",
     help=(
         "Generate changelong form input milestone. "
         "Returns markdown text with changelog"
@@ -579,6 +583,8 @@ def generate_milestone_changelog(milestone):
     Args:
         milestone (str): milestone name
     """
+    click.echo("Generating changelog from milestone...")
+
     # sort and devide PRs by labels
     changelog = ChangeLogMilestoneProcessor(milestone)
     changelong_str = changelog.generate()
@@ -591,7 +597,3 @@ def generate_milestone_changelog(milestone):
         file.close()
 
     print(tfile.name)
-
-
-if __name__ == '__main__':
-    main()

@@ -86,11 +86,15 @@ def file_regex_replace(filename, regex, version):
         f.truncate()
 
 
-def bump_file_versions(version):
+def bump_file_versions(version, nightly=False):
 
     filename = "./openpype/version.py"
     regex = "(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?"
     file_regex_replace(filename, regex, version)
+
+    if nightly:
+        # skip nightly reversion in pyproject.toml
+        return
 
     # bump pyproject.toml
     filename = "pyproject.toml"
@@ -187,7 +191,7 @@ def main():
     if options.nightly:
         next_tag_v = calculate_next_nightly(github_token=options.github_token)
         print(next_tag_v)
-        bump_file_versions(next_tag_v)
+        bump_file_versions(next_tag_v, True)
 
     if options.finalize:
         new_release = finalize_prerelease(options.finalize)
