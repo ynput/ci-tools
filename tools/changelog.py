@@ -17,15 +17,14 @@
 from copy import deepcopy
 import os
 import requests
-from dotenv import load_dotenv
 import click
-import json
 import tempfile
 import mistune
 import itertools
 from pprint import pformat
+from utils import Printer
 
-load_dotenv()
+printer = Printer()
 
 GITHUB_TOKEN = None
 GITHUB_REPOSITORY_OWNER=None
@@ -345,7 +344,6 @@ class ChangeLogMilestoneProcessor:
     _pullrequests: list[PullRequestDescription] = []
 
     def __init__(self, milestone) -> None:
-
         # Execute the query
         result = self._run_github_query(milestone)
 
@@ -358,7 +356,7 @@ class ChangeLogMilestoneProcessor:
             pull = PullRequestDescription(**pr_)
             self._pullrequests.append(pull)
 
-        click.echo(f"Collected PRs {pformat(self._pullrequests)}")
+        printer.echo(f"Collected PRs {pformat(self._pullrequests)}")
 
         self._populate_sections()
         self._sort_by_hosts()
@@ -543,7 +541,7 @@ def assign_milestone_to_issue(milestone_id, issue_id):
         milestone_id (int): milestone number id
         issue_id (int): issue milestone id
     """
-    click.echo("Assigning milestone to issue by ids...")
+    printer.echo("Assigning milestone to issue by ids...")
 
     owner = GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
     repo_name = GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME")
@@ -583,7 +581,7 @@ def generate_milestone_changelog(milestone):
     Args:
         milestone (str): milestone name
     """
-    click.echo("Generating changelog from milestone...")
+    printer.echo("Generating changelog from milestone...")
 
     # sort and devide PRs by labels
     changelog = ChangeLogMilestoneProcessor(milestone)

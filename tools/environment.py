@@ -1,49 +1,26 @@
 import re
 import io
+import click
 import subprocess
 import platform
-from optparse import OptionParser
+from utils import Printer
 
+printer = Printer()
 
 def file_regex_find(filename, regex):
     with open(filename, 'r') as f:
-        for line in f.readlines():
+        for line in f:
             found = re.findall(regex, line)
             if not found:
                 continue
             return found.pop()
 
 
-def check_pyproject_python_version():
+def check_pyproject_python_version(pyproject_path=None):
     # bump pyproject.toml
-    filename = "pyproject.toml"
+    pyproject_path = pyproject_path or "pyproject.toml"
     regex = "^python = \"(.*)\""
-    return file_regex_find(filename, regex)
-
-def set_pyenv_python_version():
-    pyenv_executable = "pyenv"
-    pyproj_pyversion = check_pyproject_python_version()
-
-    if platform.system().lower() == "windows":
-        pyenv_executable += ".bat"
-
-    args_versions_installed = [pyenv_executable, "versions"]
-    installed_versions = _get_stdout_from_command(args_versions_installed)
-
-    # check if available versions corresponing to pyproj vers
-    exist_version = _filter_versions(installed_versions, pyproj_pyversion)
-
-    if not exist_version:
-        exist_version = _install_pyenv_version(
-            pyenv_executable, pyproj_pyversion
-        )
-
-    # pyenv local version to current dir
-    _subprocess_args(
-        [pyenv_executable, "local", exist_version]
-    ).communicate()
-
-    return exist_version
+    return file_regex_find(pyproject_path, regex)
 
 
 def _install_pyenv_version(pyenv_executable, pyproj_pyversion):
@@ -67,6 +44,15 @@ def _install_pyenv_version(pyenv_executable, pyproj_pyversion):
 
 
 def _filter_versions(versions, test_version):
+    if "," in test_version:
+        split = test_version.split(",")
+        test_version = re.sub("[\^<>=]", "", split[-1])
+    if "*" not in test_version:
+        test_version += ".*"
+    if "^" in test_version:
+        test_version = test_version.replace("^", "")
+
+    printer.echo(f"Testing version: {test_version}")
     test_version = test_version.replace("*", "[\\d]+")
     regex = f"({test_version})"
     match_versions = []
@@ -76,6 +62,7 @@ def _filter_versions(versions, test_version):
             continue
         match_versions.append(found.pop())
 
+    printer.echo(match_versions)
     # reverse sort so pop can take higher version
     if match_versions:
         match_versions = sorted(
@@ -98,19 +85,40 @@ def _get_stdout_from_command(args):
     return return_list
 
 
-def main():
-    usage = "usage: %prog [options] arg"
-    parser = OptionParser(usage)
-    parser.add_option("-P", "--set-python-version",
-                      dest="set_pyenv_local_version", action="store_true", default=False,
-                      help="return pyproject python version")
+@click.command(
+    name="set-python-version",
+    help=(
+        "Return pyproject compatible python version."
+    )
+)
+@click.option(
+    "--pyproject-path", required=False,
+    help="Relative path to project root"
+)
+def set_pyenv_python_version(pyproject_path=None):
 
-    (options, args) = parser.parse_args()
+    printer.echo("Setting up python environment...")
 
-    if options.set_pyenv_local_version:
-        version = set_pyenv_python_version()
-        print(version)
+    pyenv_executable = "pyenv"
+    pyproj_pyversion = check_pyproject_python_version(pyproject_path)
 
+    if platform.system().lower() == "windows":
+        pyenv_executable += ".bat"
 
-if __name__ == "__main__":
-    main()
+    args_versions_installed = [pyenv_executable, "versions"]
+    installed_versions = _get_stdout_from_command(args_versions_installed)
+
+    # check if available versions corresponing to pyproj vers
+    exist_version = _filter_versions(installed_versions, pyproj_pyversion)
+
+    if not exist_version:
+        exist_version = _install_pyenv_version(
+            pyenv_executable, pyproj_pyversion
+        )
+
+    # pyenv local version to current dir
+    _subprocess_args(
+        [pyenv_executable, "local", exist_version]
+    ).communicate()
+
+    print(exist_version)
