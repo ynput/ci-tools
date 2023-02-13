@@ -3,12 +3,12 @@
 
 - def: generate milestone changelog
     - iterate all milestone PR which are merged
-    - devide PRs by categories via labels
+    - divide PRs by categories via labels
         - follow config where categories have assigned labels
         - assign labels to host icons
-    - get description and create markdown colapsed text
+    - get description and create markdown collapsed text
     - create title with host icons and sort them by host order
-    - essamble full change log markdown and output as text
+    - assemble full change log markdown and output as text
     - merge changelog text at beginning of CHANGELOG.md
     - add changelog text to milestone description
     - return change log text for other actions
@@ -22,14 +22,10 @@ import tempfile
 import mistune
 import itertools
 from pprint import pformat
+from repository import GithubConnect
 from utils import Printer
 
 printer = Printer()
-
-GITHUB_TOKEN = None
-GITHUB_REPOSITORY_OWNER=None
-GITHUB_REPOSITORY_NAME=None
-
 
 
 class PullRequestDescription:
@@ -268,7 +264,7 @@ class SectionItems:
         self._pulls.append(pull)
 
 
-class DomaneItems:
+class DomaineItems:
     name: str = ""
     hosts: list[str]
 
@@ -277,11 +273,13 @@ class DomaneItems:
         self.hosts = hosts
 
     def __repr__(self) -> str:
-        return f"<DomaneItems('{self.name}')>"
+        return f"<DomaineItems('{self.name}')>"
 
 
 class ChangeLogMilestoneProcessor:
-    pulrequest_items_limit = 10
+    repo_connect = GithubConnect()
+
+    pullrequest_items_limit = 10
 
     domain_color = "#367F6C"
     domain_bold = False
@@ -303,11 +301,11 @@ class ChangeLogMilestoneProcessor:
         SectionItems("### **📃 Documentation**", "documentation"),
         SectionItems("### **Merged pull requests**", "*")
     ]
-    domains: list[DomaneItems] = [
-        DomaneItems("3d", ["maya", "houdini", "unreal"]),
-        DomaneItems("2d", ["nuke", "fusion"]),
-        DomaneItems("editorial", ["hiero", "flame", "resolve"]),
-        DomaneItems("other", ["*"])
+    domains: list[DomaineItems] = [
+        DomaineItems("3d", ["maya", "houdini", "unreal"]),
+        DomaineItems("2d", ["nuke", "fusion"]),
+        DomaineItems("editorial", ["hiero", "flame", "resolve"]),
+        DomaineItems("other", ["*"])
     ]
 
     query = """
@@ -374,10 +372,10 @@ class ChangeLogMilestoneProcessor:
             str: json text
         """
         variables = {
-            "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
-            "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
+            "owner": self.repo_connect.owner,
+            "repo_name": self.repo_connect.name,
             "milestone": milestone,
-            "num_prs": self.pulrequest_items_limit
+            "num_prs": self.pullrequest_items_limit
         }
 
         try:
@@ -512,9 +510,9 @@ ___
 
 
 def _get_request_header():
-    github_token = GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
+    repo_connect = GithubConnect()
 
-    return {"Authorization": f"Bearer {github_token}"}
+    return {"Authorization": f"Bearer {repo_connect.token}"}
 
 
 @click.command(
@@ -543,12 +541,11 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     """
     printer.echo("Assigning milestone to issue by ids...")
 
-    owner = GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER")
-    repo_name = GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME")
+    repo_connect = GithubConnect()
 
     try:
         request = requests.patch(
-            url=f"https://api.github.com/repos/{owner}/{repo_name}/issues/{issue_id}",
+            url=f"https://api.github.com/repos/{repo_connect.repo_path}/issues/{issue_id}",
             data=f"{{\"milestone\": {milestone_id}}}",
             headers=_get_request_header(),
             timeout=3
@@ -583,7 +580,7 @@ def generate_milestone_changelog(milestone):
     """
     printer.echo("Generating changelog from milestone...")
 
-    # sort and devide PRs by labels
+    # sort and divide PRs by labels
     changelog = ChangeLogMilestoneProcessor(milestone)
     changelong_str = changelog.generate()
 

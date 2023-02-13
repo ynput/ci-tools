@@ -98,7 +98,8 @@ def _get_stdout_from_command(args):
 )
 @click.option(
     "--pyproject-path", required=False,
-    help="Relative path to project root"
+    help="Relative path to project root",
+    type=click.Path()
 )
 def set_pyenv_python_version(pyproject_path=None):
 
