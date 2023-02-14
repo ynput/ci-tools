@@ -56,6 +56,16 @@ class GithubConnect:
 def get_local_git_repo(repo_path):
     return Repo(repo_path)
 
+def get_latest_commit(branch):
+    repo_connect = GithubConnect()
+    repo = repo_connect.remote_repo
+
+    branches = repo.get_branches()
+    for branch_ in branches:
+        if branch_.name == branch:
+            HEAD = repo.get_commit( str(branch_.commit.sha))
+            return HEAD.sha
+
 
 @click.command(
     name="get-latest-commit",
@@ -67,14 +77,8 @@ def get_local_git_repo(repo_path):
     "--branch", required=True,
     help="branch name"
 )
-def get_latest_commit(branch):
+def get_latest_commit_cli(branch):
     printer.echo(f"Branch activated '{branch}'..")
-    repo_connect = GithubConnect()
-    repo = repo_connect.remote_repo
-
-    branches = repo.get_branches()
-    for branch_ in branches:
-        if branch_.name == branch:
-            HEAD = repo.get_commit( str(branch_.commit.sha))
-            printer.echo(f"Latest commit '{HEAD.sha}'..")
-            return HEAD.sha
+    commit_sha = get_latest_commit(branch)
+    printer.echo(f"Latest commit '{commit_sha}'..")
+    print(commit_sha)

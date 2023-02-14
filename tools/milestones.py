@@ -14,33 +14,30 @@ set_milestone_name:
             - return milestone name
 """
 
-import os
+import click
 from pprint import pprint
 import requests
-from dotenv import load_dotenv
+import re
+from utils import Printer
+from repository import (
+    GithubConnect
+)
 
+printer = Printer()
 
-load_dotenv()
-
-GITHUB_TOKEN = None
-GITHUB_REPOSITORY_OWNER=None
-GITHUB_REPOSITORY_NAME=None
-
-
+MILESTONE_COMMIT_DESCRIPTION = "closing-commit-hash:"
 
 QUERY = """
     query (
-        $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
+        $repo_owner: String!, $repo_name: String!, $milestone: String!
     ){
-        repository(owner: $owner, name: $repo_name) {
+        repository(owner: $repo_owner, name: $repo_name) {
             milestones(query: $milestone, first: 1) {
                 nodes{
                     title
                     url
                     number
-                    pullRequests(states:[MERGED], first: $num_prs){
-                        totalCount
-                    }
+                    description
                 }
             }
         }
@@ -48,9 +45,9 @@ QUERY = """
 """
 
 def _get_request_header():
-    github_token = GITHUB_TOKEN or os.getenv("GITHUB_TOKEN")
+    repo_connect = GithubConnect()
 
-    return {"Authorization": f"Bearer {github_token}"}
+    return {"Authorization": f"Bearer {repo_connect.token}"}
 
 
 def _run_github_query(milestone):
@@ -65,11 +62,12 @@ def _run_github_query(milestone):
     Returns:
         str: json text
     """
+    repo_connect = GithubConnect()
+
     variables = {
-        "owner": GITHUB_REPOSITORY_OWNER or os.getenv("GITHUB_REPOSITORY_OWNER"),
-        "repo_name": GITHUB_REPOSITORY_NAME or os.getenv("GITHUB_REPOSITORY_NAME"),
-        "milestone": milestone,
-        "num_prs": 10
+        "repo_owner": repo_connect.owner,
+        "repo_name": repo_connect.name,
+        "milestone": milestone
     }
 
     try:
@@ -93,4 +91,71 @@ def _run_github_query(milestone):
 
     return request.json()
 
-pprint(_run_github_query("next-patch"))
+
+def get_commit_from_milestone_description(milestone):
+    """Returns a closing commit sha if
+
+    it is found in descriptions
+
+    Args:
+        milestone (str): milestone title
+
+    Returns:
+        str: commit sha
+    """
+    pattern = re.compile(f"(?:({MILESTONE_COMMIT_DESCRIPTION}\s))([a-z0-9]+)")
+    query_back = _run_github_query(milestone)
+    returned_nodes = query_back["data"]["repository"]["milestones"]["nodes"]
+    milestone_data = next(
+        iter(m for m in returned_nodes if milestone == m["title"]),
+        None
+    )
+
+    if milestone_data:
+        matching_groups = pattern.findall(milestone_data["description"])
+        if not matching_groups:
+            return
+        match = matching_groups.pop()
+        return match[-1]
+
+
+@click.command(
+    name="get-milestone-commit",
+    help=(
+        "Get commit from milestone description"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+def get_commit_from_milestone_description_cli(milestone):
+    """Wrapping cli function
+
+    Returns a closing commit sha if
+    it is found in descriptions
+
+    Args:
+        milestone (str): milestone title
+
+    Returns:
+        str: commit sha
+    """
+    commit_sha = get_commit_from_milestone_description(milestone)
+    if commit_sha:
+        print(commit_sha)
+
+
+@click.command(
+    name="set-milestone-commit",
+    help=(
+        "Set commit to milestone description"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+def set_commit_to_milestone_description(milestone, commit_sha):
+    milestone_obj = _run_github_query(milestone)
+    print(milestone_obj["description"])

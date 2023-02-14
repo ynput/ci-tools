@@ -5,16 +5,20 @@ from utils import Printer
 
 
 from changelog import (
-    generate_milestone_changelog,
-    assign_milestone_to_issue
+    generate_milestone_changelog_cli,
+    assign_milestone_to_issue_cli
 )
 from environment import set_pyenv_python_version
+from milestones import (
+    get_commit_from_milestone_description_cli,
+    set_commit_to_milestone_description
+)
 from versioning import (
     bump
 )
 from repository import (
     GithubConnect,
-    get_latest_commit
+    get_latest_commit_cli
 )
 
 load_dotenv()
@@ -26,8 +30,8 @@ printer = Printer()
 def changelog():
     printer.echo("Changelog commands activated...")
 
-changelog.add_command(generate_milestone_changelog)
-changelog.add_command(assign_milestone_to_issue)
+changelog.add_command(generate_milestone_changelog_cli)
+changelog.add_command(assign_milestone_to_issue_cli)
 
 
 @click.group()
@@ -40,7 +44,15 @@ env.add_command(set_pyenv_python_version)
 def repo():
     printer.echo("repository commands activated...")
 
-repo.add_command(get_latest_commit)
+repo.add_command(get_latest_commit_cli)
+
+
+@click.group()
+def milestones():
+    printer.echo("milestones commands activated...")
+
+milestones.add_command(get_commit_from_milestone_description_cli)
+milestones.add_command(set_commit_to_milestone_description)
 
 
 @click.group()
@@ -83,6 +95,7 @@ cli.add_command(changelog)
 cli.add_command(env)
 cli.add_command(repo)
 cli.add_command(versioning)
+cli.add_command(milestones)
 
 if __name__ == '__main__':
     cli()

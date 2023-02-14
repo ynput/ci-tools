@@ -1,21 +1,41 @@
 import re
+import click
+import git
 from semver import VersionInfo
 from git import Repo
 from optparse import OptionParser
 from github import Github
 
+from utils import Printer
 
-def get_release_type_github(Log, github_token):
-    # print(Log)
+printer = Printer()
+
+
+class GithubConnect:
+    _repo: any
+    _github: any
+
+    def __init__(self):
+        pass
+
+    @property
+    def repo(self):
+        return self._repo
+
+    @property
+    def github(self):
+        return self._github
+
+    @classmethod
+    def set_attributes(cls, owner, name, token):
+        cls._github = Github(token)
+        cls._repo = cls._github.get_repo(f"{owner}/{name}")
+
+
+def get_release_type_github(Log):
     minor_labels = ["Bump Minor"]
-    # patch_labels = [
-    #     "type: enhancement",
-    #     "type: bug",
-    #     "type: deprecated",
-    #     "type: Feature"]
 
-    g = Github(github_token)
-    repo = g.get_repo("ynput/OpenPype")
+    repo = GithubConnect().repo
 
     labels = set()
     for line in Log.splitlines():
@@ -40,17 +60,19 @@ def remove_prefix(text, prefix):
 
 
 def get_last_version(match):
-    repo = Repo()
-    assert not repo.bare
+    repo = GithubConnect().repo
+
     version_types = {
-        "CI": "CI/[0-9]*",
-        "release": "[0-9]*"
+        "CI": "^CI/[0-9]*",
+        "release": "^[0-9]*"
     }
-    tag = repo.git.describe(
-        '--tags',
-        f'--match={version_types[match]}',
-        '--abbrev=0'
-        )
+
+    pattern = re.compile(version_types[match])
+
+    tag = list(
+        tag.name for tag in repo.get_tags()
+        if pattern.search(tag.name).group()
+    )[0]
 
     if match == "CI":
         return remove_prefix(tag, "CI/"), tag
@@ -80,7 +102,7 @@ def file_regex_replace(filename, regex, version):
     with open(filename, 'r+') as f:
         text = f.read()
         text = re.sub(regex, version, text)
-        # pp.pprint(f"NEW VERSION {version} INSERTED into {filename}")
+
         f.seek(0)
         f.write(text)
         f.truncate()
@@ -103,7 +125,7 @@ def bump_file_versions(version, nightly=False):
     file_regex_replace(filename, regex, pyproject_version)
 
 
-def calculate_next_nightly(type="nightly", github_token=None):
+def calculate_next_nightly(type="nightly"):
     last_prerelease, last_pre_tag = get_last_version("CI")
     last_pre_v = VersionInfo.parse(last_prerelease)
     last_pre_v_finalized = last_pre_v.finalize_version()
@@ -112,9 +134,8 @@ def calculate_next_nightly(type="nightly", github_token=None):
 
     last_release_v = VersionInfo.parse(last_release)
     bump_type = get_release_type_github(
-        get_log_since_tag(last_release_tag),
-        github_token
-        )
+        get_log_since_tag(last_release_tag)
+    )
     if not bump_type:
         return None
 
@@ -146,15 +167,37 @@ def finalize_prerelease(prerelease):
     return prerelease_v_finalized.__str__()
 
 
+@click.command(
+    name="bump",
+    help=(
+        "Bump nightly version and return it."
+    )
+)
+@click.option(
+    "--github-token", required=True,
+    help="Github Token"
+)
+def bump(github_token):
+    GithubConnect.set_attributes("ynput", "OpenPype", github_token)
+
+    last_release, last_release_tag = get_last_version("release")
+    printer.echo((last_release, last_release_tag))
+
+    bump_type_release = get_release_type_github(
+        get_log_since_tag(last_release_tag)
+    )
+    if bump_type_release is None:
+        print("skip")
+    else:
+        print(bump_type_release)
+
+
 def main():
     usage = "usage: %prog [options] arg"
     parser = OptionParser(usage)
     parser.add_option("-n", "--nightly",
                       dest="nightly", action="store_true",
                       help="Bump nightly version and return it")
-    parser.add_option("-b", "--bump",
-                      dest="bump", action="store_true",
-                      help="Return if there is something to bump")
     parser.add_option("-r", "--release-latest",
                       dest="releaselatest", action="store_true",
                       help="finalize latest prerelease to a release")
@@ -177,16 +220,6 @@ def main():
 
     (options, args) = parser.parse_args()
 
-    if options.bump:
-        last_release, last_release_tag = get_last_version("release")
-        bump_type_release = get_release_type_github(
-            get_log_since_tag(last_release_tag),
-            options.github_token
-            )
-        if bump_type_release is None:
-            print("skip")
-        else:
-            print(bump_type_release)
 
     if options.nightly:
         next_tag_v = calculate_next_nightly(github_token=options.github_token)
@@ -221,8 +254,3 @@ def main():
     if options.version:
         bump_file_versions(options.version)
         print(f"Injected version {options.version} into the release")
-
-
-
-if __name__ == "__main__":
-    main()

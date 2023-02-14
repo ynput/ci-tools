@@ -30,7 +30,7 @@ def _install_pyenv_version(pyenv_executable, pyproj_pyversion):
 
     if not version_to_install:
         raise KeyError((
-            "Version doesnt exists in pyenv repository. "
+            "Version doesn't exists in pyenv repository. "
             f"Available versions: {available_versions}. "
             f"Pyproject.toml version: {pyproj_pyversion}."
         ))
@@ -114,7 +114,7 @@ def set_pyenv_python_version(pyproject_path=None):
     args_versions_installed = [pyenv_executable, "versions"]
     installed_versions = _get_stdout_from_command(args_versions_installed)
 
-    # check if available versions corresponing to pyproj vers
+    # check if available versions corresponding to pyproj vers
     exist_version = _filter_versions(installed_versions, pyproj_pyversion)
 
     if not exist_version:

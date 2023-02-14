@@ -15,7 +15,6 @@
 """
 
 from copy import deepcopy
-import os
 import requests
 import click
 import tempfile
@@ -515,23 +514,6 @@ def _get_request_header():
     return {"Authorization": f"Bearer {repo_connect.token}"}
 
 
-@click.command(
-    name="set-milestone-to-issue",
-    help=(
-        "Assign milestone to issue by ids. "
-        "Returns JSON string with the edited issue"
-    )
-)
-@click.option(
-    "--milestone-id", required=True,
-    help="Milestone ID number > `10`",
-    type=click.INT
-)
-@click.option(
-    "--issue-id", required=True,
-    help="Issue ID number > `10`",
-    type=click.INT
-)
 def assign_milestone_to_issue(milestone_id, issue_id):
     """Assign milestone to issue by ids
 
@@ -539,8 +521,6 @@ def assign_milestone_to_issue(milestone_id, issue_id):
         milestone_id (int): milestone number id
         issue_id (int): issue milestone id
     """
-    printer.echo("Assigning milestone to issue by ids...")
-
     repo_connect = GithubConnect()
 
     try:
@@ -562,6 +542,46 @@ def assign_milestone_to_issue(milestone_id, issue_id):
 
 
 @click.command(
+    name="set-milestone-to-issue",
+    help=(
+        "Assign milestone to issue by ids. "
+        "Returns JSON string with the edited issue"
+    )
+)
+@click.option(
+    "--milestone-id", required=True,
+    help="Milestone ID number > `10`",
+    type=click.INT
+)
+@click.option(
+    "--issue-id", required=True,
+    help="Issue ID number > `10`",
+    type=click.INT
+)
+def assign_milestone_to_issue_cli(milestone_id, issue_id):
+    """Wrapping cli function
+
+    Assign milestone to issue by ids
+
+    Args:
+        milestone_id (int): milestone number id
+        issue_id (int): issue milestone id
+    """
+    printer.echo("Assigning milestone to issue by ids...")
+    assign_milestone_to_issue(milestone_id, issue_id)
+
+
+def generate_milestone_changelog(milestone):
+    """Generate changelog from input milestone
+
+    Args:
+        milestone (str): milestone name
+    """
+    changelog = ChangeLogMilestoneProcessor(milestone)
+    return changelog.generate()
+
+
+@click.command(
     name="generate-milestone-changelog",
     help=(
         "Generate changelong form input milestone. "
@@ -572,17 +592,17 @@ def assign_milestone_to_issue(milestone_id, issue_id):
     "--milestone", required=True,
     help="Name of milestone > `1.0.1`"
 )
-def generate_milestone_changelog(milestone):
-    """Generate changelog from input milestone
+def generate_milestone_changelog_cli(milestone):
+    """Wrapping cli function
+
+    Generate changelog from input milestone
 
     Args:
         milestone (str): milestone name
     """
     printer.echo("Generating changelog from milestone...")
 
-    # sort and divide PRs by labels
-    changelog = ChangeLogMilestoneProcessor(milestone)
-    changelong_str = changelog.generate()
+    changelong_str = generate_milestone_changelog(milestone)
 
     tfile = tempfile.NamedTemporaryFile(mode="w+", encoding="UTF-8")
     tfile.close()
