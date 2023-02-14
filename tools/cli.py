@@ -11,7 +11,7 @@ from changelog import (
 from environment import set_pyenv_python_version
 from milestones import (
     get_commit_from_milestone_description_cli,
-    set_commit_to_milestone_description
+    set_commit_to_milestone_description_cli
 )
 from versioning import (
     bump_version_cli,
@@ -53,7 +53,7 @@ def milestones():
     printer.echo("milestones commands activated...")
 
 milestones.add_command(get_commit_from_milestone_description_cli)
-milestones.add_command(set_commit_to_milestone_description)
+milestones.add_command(set_commit_to_milestone_description_cli)
 
 
 @click.group()

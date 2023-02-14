@@ -16,6 +16,7 @@ set_milestone_name:
 
 import click
 from pprint import pprint
+from datetime import datetime
 import requests
 import re
 from utils import Printer
@@ -91,6 +92,13 @@ def _run_github_query(milestone):
 
     return request.json()
 
+def _get_milestone_from_query_data(data, milestone):
+    returned_nodes = data["data"]["repository"]["milestones"]["nodes"]
+    milestone_data = next(
+        iter(m for m in returned_nodes if milestone == m["title"]),
+        None
+    )
+    return milestone_data
 
 def get_commit_from_milestone_description(milestone):
     """Returns a closing commit sha if
@@ -103,20 +111,19 @@ def get_commit_from_milestone_description(milestone):
     Returns:
         str: commit sha
     """
-    pattern = re.compile(f"(?:({MILESTONE_COMMIT_DESCRIPTION}\s))([a-z0-9]+)")
     query_back = _run_github_query(milestone)
-    returned_nodes = query_back["data"]["repository"]["milestones"]["nodes"]
-    milestone_data = next(
-        iter(m for m in returned_nodes if milestone == m["title"]),
-        None
-    )
+    milestone_data = _get_milestone_from_query_data(query_back, milestone)
 
-    if milestone_data:
-        matching_groups = pattern.findall(milestone_data["description"])
-        if not matching_groups:
-            return
-        match = matching_groups.pop()
-        return match[-1]
+    if not milestone_data:
+        raise NameError(f"Input milestone does not exists: '{milestone}'")
+
+    pattern = re.compile(f"(?:({MILESTONE_COMMIT_DESCRIPTION}\s))([a-z0-9]+)")
+    matching_groups = pattern.findall(milestone_data["description"])
+    if not matching_groups:
+        return
+
+    match = matching_groups.pop()
+    return match[-1]
 
 
 @click.command(
@@ -146,6 +153,29 @@ def get_commit_from_milestone_description_cli(milestone):
         print(commit_sha)
 
 
+def set_commit_to_milestone_description(milestone, commit_sha):
+    query_back = _run_github_query(milestone)
+    milestone_data = _get_milestone_from_query_data(query_back, milestone)
+
+    if not milestone_data:
+        raise NameError(f"Input milestone does not exists: '{milestone}'")
+
+    if get_commit_from_milestone_description(milestone):
+        return False
+
+    repo = GithubConnect().remote_repo
+    milestone_obj = repo.get_milestone(number=milestone_data["number"])
+    milestone_description = milestone_data["description"]
+    commit_line = f"{MILESTONE_COMMIT_DESCRIPTION} {commit_sha}\n"
+    milestone_description = commit_line + milestone_description
+    milestone_obj.edit(
+        title=milestone_data["title"],
+        description=milestone_description,
+        due_on=datetime.now()
+    )
+    return True
+
+
 @click.command(
     name="set-milestone-commit",
     help=(
@@ -156,6 +186,11 @@ def get_commit_from_milestone_description_cli(milestone):
     "--milestone", required=True,
     help="Name of milestone > `1.0.1`"
 )
-def set_commit_to_milestone_description(milestone, commit_sha):
-    milestone_obj = _run_github_query(milestone)
-    print(milestone_obj["description"])
+@click.option(
+    "--commit-sha", required=True,
+    help="The commit hash which should be added to milestone"
+)
+def set_commit_to_milestone_description_cli(milestone, commit_sha):
+    print(
+        set_commit_to_milestone_description(milestone, commit_sha)
+    )
