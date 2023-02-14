@@ -1,101 +1,44 @@
 import re
 import click
-import git
 from semver import VersionInfo
-from git import Repo
-from optparse import OptionParser
-from github import Github
+from repository import GithubConnect
 
 from utils import Printer
 
 printer = Printer()
 
 
-class GithubConnect:
-    _repo: any
-    _github: any
-
-    def __init__(self):
-        pass
-
-    @property
-    def repo(self):
-        return self._repo
-
-    @property
-    def github(self):
-        return self._github
-
-    @classmethod
-    def set_attributes(cls, owner, name, token):
-        cls._github = Github(token)
-        cls._repo = cls._github.get_repo(f"{owner}/{name}")
-
-
-def get_release_type_github(Log):
-    minor_labels = ["Bump Minor"]
-
-    repo = GithubConnect().repo
-
-    labels = set()
-    for line in Log.splitlines():
-        match = re.search("pull request #(\d+)", line)
-        if match:
-            pr_number = match.group(1)
-            try:
-                pr = repo.get_pull(int(pr_number))
-            except:
-                continue
-            for label in pr.labels:
-                labels.add(label.name)
-
-    if any(label in labels for label in minor_labels):
-        return "minor"
-    else:
-        return "patch"
-
-
 def remove_prefix(text, prefix):
     return text[text.startswith(prefix) and len(prefix):]
 
 
-def get_last_version(match):
-    repo = GithubConnect().repo
+def get_last_version(type):
+    repo = GithubConnect().remote_repo
 
     version_types = {
-        "CI": "^CI/[0-9]*",
-        "release": "^[0-9]*"
+        "CI": "^CI/[0-9\.]*",
+        "release": "^[0-9\.]*"
     }
 
-    pattern = re.compile(version_types[match])
+    pattern = re.compile(version_types[type])
 
-    tag = list(
-        tag.name for tag in repo.get_tags()
-        if pattern.search(tag.name).group()
-    )[0]
+    tags = []
+    for tag in repo.get_tags():
+        match_obj = pattern.match(tag.name)
+        # QUESTION: didn't find better way to do this
+        if not match_obj:
+            continue
+        match = match_obj.group(0)
+        if not match:
+            continue
+        tags.append(tag.name)
 
-    if match == "CI":
+    tag = tags[0]
+
+    if type == "CI":
         return remove_prefix(tag, "CI/"), tag
     else:
         return tag, tag
-
-
-def get_log_since_tag(version):
-    repo = Repo()
-    assert not repo.bare
-    return repo.git.log(f'{version}..HEAD', '--merges', '--oneline')
-
-
-def release_type(log):
-    regex_minor = ["feature/", "(feat)"]
-    regex_patch = ["bugfix/", "fix/", "(fix)", "enhancement/", "update"]
-    for reg in regex_minor:
-        if re.search(reg, log):
-            return "minor"
-    for reg in regex_patch:
-        if re.search(reg, log):
-            return "patch"
-    return None
 
 
 def file_regex_replace(filename, regex, version):
@@ -108,149 +51,62 @@ def file_regex_replace(filename, regex, version):
         f.truncate()
 
 
-def bump_file_versions(version, nightly=False):
+def bump_file_versions(version, version_path, pyproject_path):
 
-    filename = "./openpype/version.py"
     regex = "(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?"
-    file_regex_replace(filename, regex, version)
-
-    if nightly:
-        # skip nightly reversion in pyproject.toml
-        return
+    file_regex_replace(version_path, regex, version)
 
     # bump pyproject.toml
-    filename = "pyproject.toml"
-    regex = "version = \"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\+((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?\" # OpenPype"
-    pyproject_version = f"version = \"{version}\" # OpenPype"
-    file_regex_replace(filename, regex, pyproject_version)
-
-
-def calculate_next_nightly(type="nightly"):
-    last_prerelease, last_pre_tag = get_last_version("CI")
-    last_pre_v = VersionInfo.parse(last_prerelease)
-    last_pre_v_finalized = last_pre_v.finalize_version()
-
-    last_release, last_release_tag = get_last_version("release")
-
-    last_release_v = VersionInfo.parse(last_release)
-    bump_type = get_release_type_github(
-        get_log_since_tag(last_release_tag)
-    )
-    if not bump_type:
-        return None
-
-    next_release_v = last_release_v.next_version(part=bump_type)
-    # print(next_release_v)
-
-    if next_release_v > last_pre_v_finalized:
-        next_tag = next_release_v.bump_prerelease(token=type).__str__()
-        return next_tag
-    elif next_release_v == last_pre_v_finalized:
-        next_tag = last_pre_v.bump_prerelease(token=type).__str__()
-        return next_tag
-
-def finalize_latest_nightly():
-    last_prerelease, last_pre_tag = get_last_version("CI")
-    last_pre_v = VersionInfo.parse(last_prerelease)
-    last_pre_v_finalized = last_pre_v.finalize_version()
-
-    return last_pre_v_finalized.__str__()
-
-def finalize_prerelease(prerelease):
-
-    if "/" in prerelease:
-        prerelease = prerelease.split("/")[-1]
-
-    prerelease_v = VersionInfo.parse(prerelease)
-    prerelease_v_finalized = prerelease_v.finalize_version()
-
-    return prerelease_v_finalized.__str__()
+    regex = "version = \"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\+((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?\""
+    pyproject_version = f"version = \"{version}\""
+    file_regex_replace(pyproject_path, regex, pyproject_version)
 
 
 @click.command(
-    name="bump",
+    name="bump-file-version",
     help=(
-        "Bump nightly version and return it."
+        "Bump version number inside of version.py and pyproject.toml."
     )
 )
 @click.option(
-    "--github-token", required=True,
-    help="Github Token"
+    "--version", required=True,
+    help="Version SemVer string"
 )
-def bump(github_token):
-    GithubConnect.set_attributes("ynput", "OpenPype", github_token)
+@click.option(
+    "--pyproject-path", required=True,
+    help="Relative/absolute path to pyproject.toml from project root"
+)
+@click.option(
+    "--version-path", required=True,
+    help="Relative/absolute path to version.py from project root"
+)
+def bump_file_versions_cli(version, version_path, pyproject_path):
+    bump_file_versions(version, version_path, pyproject_path)
 
-    last_release, last_release_tag = get_last_version("release")
-    printer.echo((last_release, last_release_tag))
 
-    bump_type_release = get_release_type_github(
-        get_log_since_tag(last_release_tag)
+def bump_version(type, part):
+    last_release, _ = get_last_version(type)
+    last_release_v = VersionInfo.parse(last_release)
+    return last_release_v.next_version(part)
+
+
+@click.command(
+    name="bump-version",
+    help=(
+        "Bump version number from latest found tag in repository."
     )
-    if bump_type_release is None:
-        print("skip")
-    else:
-        print(bump_type_release)
-
-
-def main():
-    usage = "usage: %prog [options] arg"
-    parser = OptionParser(usage)
-    parser.add_option("-n", "--nightly",
-                      dest="nightly", action="store_true",
-                      help="Bump nightly version and return it")
-    parser.add_option("-r", "--release-latest",
-                      dest="releaselatest", action="store_true",
-                      help="finalize latest prerelease to a release")
-    parser.add_option("-p", "--prerelease",
-                      dest="prerelease", action="store",
-                      help="define prerelease type")
-    parser.add_option("-f", "--finalize",
-                      dest="finalize", action="store",
-                      help="define prerelease type")
-    parser.add_option("-v", "--version",
-                      dest="version", action="store",
-                      help="work with explicit version")
-    parser.add_option("-l", "--lastversion",
-                      dest="lastversion", action="store",
-                      help="work with explicit version")
-    parser.add_option("-g", "--github_token",
-                      dest="github_token", action="store",
-                      help="github token")
-
-
-    (options, args) = parser.parse_args()
-
-
-    if options.nightly:
-        next_tag_v = calculate_next_nightly(github_token=options.github_token)
-        print(next_tag_v)
-        bump_file_versions(next_tag_v, True)
-
-    if options.finalize:
-        new_release = finalize_prerelease(options.finalize)
-        print(new_release)
-        bump_file_versions(new_release)
-
-    if options.lastversion:
-        last_release, last_release_tag = get_last_version(options.lastversion)
-        print(last_release_tag)
-
-    if options.releaselatest:
-        new_release = finalize_latest_nightly()
-        last_release, last_release_tag = get_last_version("release")
-
-        if VersionInfo.parse(new_release) > VersionInfo.parse(last_release):
-            print(new_release)
-            bump_file_versions(new_release)
-        else:
-            print("skip")
-
-    if options.prerelease:
-        current_prerelease = VersionInfo.parse(options.prerelease)
-        new_prerelease = current_prerelease.bump_prerelease().__str__()
-        print(new_prerelease)
-        bump_file_versions(new_prerelease)
-
-    if options.version:
-        bump_file_versions(options.version)
-        print(f"Injected version {options.version} into the release")
+)
+@click.option(
+    "--type", required=True,
+    help="Type of version tag (CI or release)"
+)
+@click.option(
+    "--part", required=True,
+    help=(
+        "SemVer part of version should be bumped. \n"
+        "Example: major, minor, patch"
+    )
+)
+def bump_version_cli(type, part):
+    new_version = bump_version(type, part)
+    print(new_version)

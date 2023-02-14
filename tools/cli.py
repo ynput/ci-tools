@@ -14,7 +14,8 @@ from milestones import (
     set_commit_to_milestone_description
 )
 from versioning import (
-    bump
+    bump_version_cli,
+    bump_file_versions_cli
 )
 from repository import (
     GithubConnect,
@@ -59,8 +60,8 @@ milestones.add_command(set_commit_to_milestone_description)
 def versioning():
     printer.echo("Versioning commands activated...")
 
-versioning.add_command(bump)
-
+versioning.add_command(bump_version_cli)
+versioning.add_command(bump_file_versions_cli)
 
 @click.group()
 @click.option("--debug/--no-debug", default=False)
