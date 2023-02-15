@@ -30,8 +30,6 @@ jobs:
     env:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
       base-branch: "develop"
-      GITHUB_REPOSITORY_OWNER: "${{ inputs.repo-owner }}"
-      GITHUB_REPOSITORY_NAME: "${{ inputs.repo-name }}"
 
     steps:
       #----------------------------------------------
@@ -48,6 +46,8 @@ jobs:
       - name: Set Environment vars
         run: |
           echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
 
       #----------------------------------------------
       #      check out to ci tools repo
