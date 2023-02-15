@@ -115,7 +115,11 @@ def get_commit_from_milestone_description(milestone):
     milestone_data = _get_milestone_from_query_data(query_back, milestone)
 
     if not milestone_data:
-        raise NameError(f"Input milestone does not exists: '{milestone}'")
+        repo_connect = GithubConnect()
+        raise NameError(
+            f"Input milestone does not exists: '{milestone}'"
+            f" repo: '{repo_connect.repo_path}'"
+        )
 
     pattern = re.compile(f"(?:({MILESTONE_COMMIT_DESCRIPTION}\s))([a-z0-9]+)")
     matching_groups = pattern.findall(milestone_data["description"])
