@@ -62,7 +62,7 @@ jobs:
           python-version: '3.10'
       - name: Test CI Tools work dir content
         run: |
-          cd "${env.ci-tools-workdir}"
+          cd "${{ env.ci-tools-workdir }}"
           ls -l
 
       #----------------------------------------------
@@ -79,15 +79,15 @@ jobs:
       # install dependencies if cache does not exist
       #----------------------------------------------
       - name: Install dependencies
-        run: poetry --directory=${env.ci-tools-workdir} install --no-interaction
+        run: poetry --directory=${{ env.ci-tools-workdir }} install --no-interaction
       #----------------------------------------------
       # Check if a commit is added to input milestone
       #----------------------------------------------
       - name: Get milestone commit
         id: milestoneCommit
         run: |
-          source ${env.ci-tools-workdir}/.venv/bin/activate
-          COMMIT = $(python ${env.ci-tools-workdir}/tools/cli.py milestones get-milestone-commit --milestone=${inputs.milestone})
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+          COMMIT = $(python ${{ env.ci-tools-workdir }}/tools/cli.py milestones get-milestone-commit --milestone=${inputs.milestone})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
         env:
@@ -100,8 +100,8 @@ jobs:
       - name: Get base branch commit
         id: baseBranchCommit
         run: |
-          source ${env.ci-tools-workdir}/.venv/bin/activate
-          COMMIT = $(python ${env.ci-tools-workdir}/tools/cli.py repo get-latest-commit --branch=${env.base-branch})
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+          COMMIT = $(python ${{ env.ci-tools-workdir }}/tools/cli.py repo get-latest-commit --branch=${env.base-branch})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
         env:
