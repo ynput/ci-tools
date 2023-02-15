@@ -31,9 +31,6 @@ jobs:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
       base-branch: "develop"
     steps:
-      #----------------------------------------------
-      #      switch between secret inputs
-      #----------------------------------------------
       - name: Set secret switch
         uses: haya14busa/action-cond@v1
         id: secretToken
