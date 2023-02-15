@@ -114,8 +114,7 @@ jobs:
 
       - name: Get next version from tags
         if: |
-          inputs.milestone == 'next-patch' ||
-          inputs.milestone == 'next-minor'
+          inputs.milestone == 'next-patch'
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           NEXT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-version --type=release --part=patch)
@@ -126,8 +125,7 @@ jobs:
 
       - name: Get next version from milestone title
         if: |
-          inputs.milestone != 'next-patch' ||
-          inputs.milestone != 'next-minor'
+          inputs.milestone != 'next-patch'
         run: |
           echo "NEXT_VERSION=${{ inputs.milestone }}" >> $GITHUB_ENV
         shell: bash
