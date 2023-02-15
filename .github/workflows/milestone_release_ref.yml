@@ -138,7 +138,7 @@ jobs:
         run : |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
 
-          changelog_temp_file=$(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ inputs.milestone }})
+          changelog_temp_file=$(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ env.NEXT_VERSION }})
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --changelog-path=${changelog_temp_file}
 
           delimiter=$(openssl rand -hex 8)
