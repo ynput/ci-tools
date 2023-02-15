@@ -87,7 +87,7 @@ jobs:
         id: milestoneCommit
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
-          COMMIT = $(python ${{ env.ci-tools-workdir }}/tools/cli.py milestones get-milestone-commit --milestone=${inputs.milestone})
+          COMMIT = $(python ${{ env.ci-tools-workdir }}/tools/cli.py milestones get-milestone-commit --milestone=${{ inputs.milestone }})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
         env:
@@ -156,7 +156,7 @@ jobs:
 
       - name: Test print the change log result
         run: |
-          echo "changelog: ${steps.changelog.outputs.string}"
-          echo "next_version: ${steps.version.outputs.next_version}"
-          echo "milestoneCommit: ${steps.milestoneCommit.outputs.commit}"
-          echo "baseBranchCommit: ${steps.baseBranchCommit.outputs.commit}"
+          echo "changelog: ${ steps.changelog.outputs.string }"
+          echo "next_version: ${ steps.version.outputs.next_version }"
+          echo "milestoneCommit: ${ steps.milestoneCommit.outputs.commit }"
+          echo "baseBranchCommit: ${ steps.baseBranchCommit.outputs.commit }"
