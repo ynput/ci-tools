@@ -10,3 +10,6 @@
 
 - bump versions in workspace files
 `python .\tools\cli.py versioning bump-file-version --version=4.1.2 --version-path=./openpype/version.py --pyproject-path=./pyproject.toml`
+
+- set commit hash to milestone
+`python .\tools\cli.py milestones set-milestone-commit --milestone=next-minor --commit-sha=9a4a138b05097e9f8c71053ce74c013171c2125c`
