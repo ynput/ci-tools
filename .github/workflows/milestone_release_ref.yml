@@ -31,6 +31,9 @@ jobs:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
       base-branch: "develop"
     steps:
+      #----------------------------------------------
+      #      switch between secret inputs
+      #----------------------------------------------
       - name: Set secret switch
         uses: haya14busa/action-cond@v1
         id: secretToken
@@ -38,12 +41,6 @@ jobs:
           cond: ${{ secrets.token != '' }}
           if_true: ${{ secrets.token }}
           if_false: ${{ secrets.YNPUT_BOT_TOKEN }}
-
-      - name: Set Environment vars
-        run: |
-          echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
-          echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
-          echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
 
       #----------------------------------------------
       #      check out to ci tools repo
@@ -93,6 +90,10 @@ jobs:
           COMMIT=$(python ${{ env.ci-tools-workdir }}/tools/cli.py milestones get-milestone-commit --milestone=${{ inputs.milestone }})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
+        env:
+          GITHUB_TOKEN: "${{ steps.secretToken.outputs.value }}"
+          GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
+          GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       #----------------------------------------------
       # Get latest commit found on develop branch
       #----------------------------------------------
@@ -103,14 +104,10 @@ jobs:
           COMMIT=$(python ${{ env.ci-tools-workdir }}/tools/cli.py repo get-latest-commit --branch=${{ env.base-branch }})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
-
-      - name: 💉 Inject commit into milestone
-      id: milestoneCommitInject
-      if: steps.milestoneCommit.outputs.commit != ''
-      run: |
-          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
-          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
-
+        env:
+          GITHUB_TOKEN: "${{ steps.secretToken.outputs.value }}"
+          GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
+          GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       # PYTHON milestone.py (step)
       # is milestone `next-patch` or `next-minor`
       #    if true:
@@ -123,6 +120,10 @@ jobs:
           NEXT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-version --type=release --part=patch)
           echo "next_version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
         shell: bash
+        env:
+          GITHUB_TOKEN: "${{ steps.secretToken.outputs.value }}"
+          GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
+          GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
       # is commit hash attribute in milestone description
       #     if false:
       #     - checkout to main (owner/name) (step)
@@ -148,6 +149,10 @@ jobs:
               echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
         shell: bash
+        env:
+          GITHUB_TOKEN: "${{ steps.secretToken.outputs.value }}"
+          GITHUB_REPOSITORY_OWNER: ${{ inputs.repo-owner }}
+          GITHUB_REPOSITORY_NAME: ${{ inputs.repo-name }}
 
       - name: Test print the change log result
         run: |
