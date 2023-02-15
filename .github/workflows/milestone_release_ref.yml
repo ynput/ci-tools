@@ -42,8 +42,12 @@ jobs:
         id: secretToken
         with:
           cond: ${{ secrets.token != '' }}
-          if_true: echo "GITHUB_TOKEN=${{ secrets.token }}" >> $GITHUB_ENV
-          if_false: echo "GITHUB_TOKEN=${{ secrets.YNPUT_BOT_TOKEN }}" >> $GITHUB_ENV
+          if_true: ${{ secrets.token }}
+          if_false: ${{ secrets.YNPUT_BOT_TOKEN }}
+
+      - name: Set Environment vars
+        run: |
+          echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
 
       #----------------------------------------------
       #      check out to ci tools repo
