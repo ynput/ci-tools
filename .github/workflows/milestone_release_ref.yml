@@ -107,7 +107,7 @@ jobs:
 
       - name: 💉 Inject commit into milestone
         id: milestoneCommitInject
-        if: steps.milestoneCommit.outputs.commit != ''
+        if: steps.milestoneCommit.outputs.commit == ''
         run: |
             source ${{ env.ci-tools-workdir }}/.venv/bin/activate
             python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
