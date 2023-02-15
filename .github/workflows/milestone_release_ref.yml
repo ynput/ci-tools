@@ -30,7 +30,6 @@ jobs:
     env:
       ci-tools-workdir: ${{ github.workspace }}/ci-tools
       base-branch: "develop"
-
     steps:
       #----------------------------------------------
       #      switch between secret inputs
