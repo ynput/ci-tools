@@ -112,41 +112,41 @@ jobs:
             source ${{ env.ci-tools-workdir }}/.venv/bin/activate
             python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
 
-
-      # PYTHON milestone.py (step)
-      # is milestone `next-patch` or `next-minor`
-      #    if true:
-      #     - get latest semver from tags (path/minor)
-      #     - rename milestone (if not pre-release)
-      - name: Get Version name
-        id: version
+      - name: Get next version from tags
+        if: |
+          inputs.milestone == 'next-patch' ||
+          inputs.milestone == 'next-minor'
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           NEXT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-version --type=release --part=patch)
-          echo "next_version=${NEXT_VERSION}" >> $GITHUB_OUTPUT
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-title --milestone=${{ inputs.milestone }} --new-title=${NEXT_VERSION}
+
+          echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
         shell: bash
-      # is commit hash attribute in milestone description
-      #     if false:
-      #     - checkout to main (owner/name) (step)
-      #     - merge latest develop to main (step)
-      #     - get hash from latest main commit (bash git)
-      #     - set to milestone description (python)
-      #     - set DueDate to milestone (python)
-      #     if true:
-      #     - get hash (python)
-      #     - checkout to the hash (owner/name) (step)
+
+      - name: Get next version from milestone title
+        if: |
+          inputs.milestone != 'next-patch' ||
+          inputs.milestone != 'next-minor'
+        run: |
+          echo "NEXT_VERSION=${{ inputs.milestone }}" >> $GITHUB_ENV
+        shell: bash
 
       #----------------------------------------------
       #              run changelog generator
       #----------------------------------------------
-      - name: Run changelog generator
+      - name: Changelog generate & assign to milestone description
         id: changelog
         run : |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+
+          changelog_temp_file=$(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ inputs.milestone }})
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --changelog-path=${changelog_temp_file}
+
           delimiter=$(openssl rand -hex 8)
           {
               echo "string<<$delimiter"
-              sed -e '$a\' $(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ inputs.milestone }})
+              sed -e '$a\' $changelog_temp_file
               echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
         shell: bash
@@ -154,6 +154,6 @@ jobs:
       - name: Test print the change log result
         run: |
           echo "changelog: ${{ steps.changelog.outputs.string }}"
-          echo "next_version: ${{ steps.version.outputs.next_version }}"
+          echo "next_version: ${{ env.NEXT_VERSION }}"
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"

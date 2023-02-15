@@ -13,3 +13,6 @@
 
 - set commit hash to milestone
 `python .\tools\cli.py milestones set-milestone-commit --milestone=next-minor --commit-sha=9a4a138b05097e9f8c71053ce74c013171c2125c`
+
+- Set changelog to milestone
+`python .\tools\cli.py milestones set-milestone-changelog --milestone=next-minor --changelog-path=/tmp/oanneq7asdfe`

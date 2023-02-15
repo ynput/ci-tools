@@ -198,3 +198,80 @@ def set_commit_to_milestone_description_cli(milestone, commit_sha):
     print(
         set_commit_to_milestone_description(milestone, commit_sha)
     )
+
+
+def set_changelog_to_milestone_description(milestone, changelog_path):
+    query_back = _run_github_query(milestone)
+    milestone_data = _get_milestone_from_query_data(query_back, milestone)
+
+    if not milestone_data:
+        raise NameError(f"Input milestone does not exists: '{milestone}'")
+
+    # get changelog as multiline string from temp path
+    with open(changelog_path, 'r', encoding="UTF-8") as f:
+        changelog = f.read()
+
+    repo = GithubConnect().remote_repo
+    milestone_obj = repo.get_milestone(number=milestone_data["number"])
+    milestone_description = milestone_data["description"]
+    milestone_description = milestone_description + changelog
+    milestone_obj.edit(
+        title=milestone_data["title"],
+        description=milestone_description,
+    )
+    return True
+
+
+@click.command(
+    name="set-milestone-changelog",
+    help=(
+        "Set changelog to milestone description"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+@click.option(
+    "--changelog-path", required=True,
+    help="Changelog path"
+)
+def set_changelog_to_milestone_description_cli(milestone, changelog_path):
+    print(
+        set_changelog_to_milestone_description(milestone, changelog_path)
+    )
+
+
+def set_new_milestone_title(milestone, new_title):
+    query_back = _run_github_query(milestone)
+    milestone_data = _get_milestone_from_query_data(query_back, milestone)
+
+    if not milestone_data:
+        raise NameError(f"Input milestone does not exists: '{milestone}'")
+
+    repo = GithubConnect().remote_repo
+    milestone_obj = repo.get_milestone(number=milestone_data["number"])
+    milestone_obj.edit(
+        title=new_title
+    )
+    return True
+
+
+@click.command(
+    name="set-milestone-title",
+    help=(
+        "Set new milestone title"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+@click.option(
+    "--new-title", required=True,
+    help="New milestone title"
+)
+def set_new_milestone_title_cli(milestone, new_title):
+    print(
+        set_new_milestone_title(milestone, new_title)
+    )

@@ -11,7 +11,9 @@ from changelog import (
 from environment import set_pyenv_python_version
 from milestones import (
     get_commit_from_milestone_description_cli,
-    set_commit_to_milestone_description_cli
+    set_commit_to_milestone_description_cli,
+    set_changelog_to_milestone_description_cli,
+    set_new_milestone_title_cli
 )
 from versioning import (
     bump_version_cli,
@@ -54,6 +56,8 @@ def milestones():
 
 milestones.add_command(get_commit_from_milestone_description_cli)
 milestones.add_command(set_commit_to_milestone_description_cli)
+milestones.add_command(set_changelog_to_milestone_description_cli)
+milestones.add_command(set_new_milestone_title_cli)
 
 
 @click.group()
@@ -62,6 +66,7 @@ def versioning():
 
 versioning.add_command(bump_version_cli)
 versioning.add_command(bump_file_versions_cli)
+
 
 @click.group()
 @click.option("--debug/--no-debug", default=False)
