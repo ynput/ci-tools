@@ -101,7 +101,7 @@ jobs:
         id: baseBranchCommit
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
-          COMMIT=$(python ${{ env.ci-tools-workdir }}/tools/cli.py repo get-latest-commit --branch=${env.base-branch})
+          COMMIT=$(python ${{ env.ci-tools-workdir }}/tools/cli.py repo get-latest-commit --branch=${{ env.base-branch }})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
         env:
