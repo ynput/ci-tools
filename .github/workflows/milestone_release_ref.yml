@@ -102,6 +102,14 @@ jobs:
           COMMIT=$(python ${{ env.ci-tools-workdir }}/tools/cli.py repo get-latest-commit --branch=${{ env.base-branch }})
           echo "commit=${COMMIT}" >> $GITHUB_OUTPUT
         shell: bash
+
+      - name: 💉 Inject commit into milestone
+      id: milestoneCommitInject
+      if: steps.milestoneCommit.outputs.commit != ''
+      run: |
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
+
       # PYTHON milestone.py (step)
       # is milestone `next-patch` or `next-minor`
       #    if true:
