@@ -9,6 +9,11 @@ on:
         required: true
       repo-name:
         required: true
+      version-py-path:
+        required: true
+      pyproject-path:
+        required: true
+
   workflow_call:
     inputs:
       milestone:
@@ -18,6 +23,12 @@ on:
         required: true
         type: string
       repo-name:
+        required: true
+        type: string
+      version-py-path:
+        required: true
+        type: string
+      pyproject-path:
         required: true
         type: string
     secrets:
