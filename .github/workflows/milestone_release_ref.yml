@@ -80,6 +80,7 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.10'
+
       - name: Test CI Tools work dir content
         run: |
           cd "${{ env.ci-tools-workdir }}"
@@ -91,9 +92,9 @@ jobs:
       - name: Install Poetry
         uses: snok/install-poetry@v1
         with:
-            virtualenvs-create: true
-            virtualenvs-in-project: true
-            installer-parallel: true
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
 
       #----------------------------------------------
       # install dependencies if cache does not exist
@@ -153,6 +154,7 @@ jobs:
           CURRENT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning current-version --type=release)
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-title --milestone=${{ inputs.milestone }} --new-title=${NEXT_VERSION}
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --tag-name=${CURRENT_VERSION}
+
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
           echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
         shell: bash
@@ -170,7 +172,7 @@ jobs:
         shell: bash
 
       #----------------------------------------------
-      # generate change log and add it to milestone
+      # generate change log and add it to milestone, bump versions
       #----------------------------------------------
       - name: Changelog generate & assign to milestone description
         id: changelog
@@ -188,6 +190,7 @@ jobs:
               sed -e '$a\' $changelog_temp_file
               echo "$delimiter"
           } >> "$GITHUB_OUTPUT"
+
         shell: bash
 
       - name: Test print the change log result
@@ -198,28 +201,28 @@ jobs:
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"
 
-    - name: 💾 Commit and Tag
-      id: git_commit
-      run: |
-        git config user.email ${{ secrets.CI_EMAIL }}
-        git config user.name ${{ secrets.CI_USER }}
-        git add .
-        git commit -m "[Automated] Release"
-        tag_name="${{ env.NEXT_VERSION }}"
-        git tag -a $tag_name -m "stable release"
+      - name: 💾 Commit and Tag
+        id: git_commit
+        run: |
+          git config user.email ${{ secrets.CI_EMAIL }}
+          git config user.name ${{ secrets.CI_USER }}
+          git add .
+          git commit -m "[Automated] Release"
+          tag_name="${{ env.NEXT_VERSION }}"
+          git tag -a $tag_name -m "stable release"
 
-    - name: 🔏 Push to protected main branch
-      uses: CasperWA/push-protected@v2.10.0
-      with:
-        token: ${{ env.GITHUB_TOKEN }}
-        branch: main
-        tags: true
-        unprotect_reviews: true
+      - name: 🔏 Push to protected main branch
+        uses: CasperWA/push-protected@v2.10.0
+        with:
+          token: ${{ env.GITHUB_TOKEN }}
+          branch: main
+          tags: true
+          unprotect_reviews: true
 
-    - name: 🔁 Merge main back to develop
-      uses: everlytic/branch-merge@1.1.0
-      with:
-        github_token: ${{ env.GITHUB_TOKEN }}
-        source_ref: 'main'
-        target_branch: 'develop'
-        commit_message_template: '[Automated] Merged release {source_ref} into {target_branch}'
+      - name: 🔁 Merge main back to develop
+        uses: everlytic/branch-merge@1.1.0
+        with:
+          github_token: ${{ env.GITHUB_TOKEN }}
+          source_ref: 'main'
+          target_branch: 'develop'
+          commit_message_template: '[Automated] Merged release {source_ref} into {target_branch}'
