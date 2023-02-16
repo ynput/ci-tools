@@ -61,7 +61,6 @@ jobs:
           echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
-          echo "test-var: ${{ env.test_var }}"
 
       #----------------------------------------------
       #      check out to ci tools repo
@@ -135,6 +134,14 @@ jobs:
             python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
 
       #----------------------------------------------
+      #      check out to ci tools repo
+      #----------------------------------------------
+      - name: Checkout Workspace repo to commit
+        uses: actions/checkout@v3
+        with:
+          ref: ${{ steps.baseBranchCommit.outputs.commit }}
+
+      #----------------------------------------------
       # get next available version from tags if
       # if milestone title still `next-` and not version
       #----------------------------------------------
@@ -143,9 +150,11 @@ jobs:
         run: |
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           NEXT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-version --type=release --part=patch)
+          CURRENT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning current-version --type=release)
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-title --milestone=${{ inputs.milestone }} --new-title=${NEXT_VERSION}
-
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --tag-name=${CURRENT_VERSION}
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
+          echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
         shell: bash
 
       #----------------------------------------------
@@ -155,7 +164,9 @@ jobs:
       - name: Get next version from milestone title
         if: startsWith(${{ inputs.milestone }}, 'next-') == false
         run: |
+          CURRENT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py milestones get-milestone-tag --milestone=${{ inputs.milestone }})
           echo "NEXT_VERSION=${{ inputs.milestone }}" >> $GITHUB_ENV
+          echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
         shell: bash
 
       #----------------------------------------------
@@ -168,7 +179,7 @@ jobs:
 
           changelog_temp_file=$(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ env.NEXT_VERSION }})
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --changelog-path=${changelog_temp_file}
-
+          python ${{ env.ci-tools-workdir }}/tools/cli.py changelog add-to-changelog-file --old-changelog-path=./CHANGELOG.md  --new-changelog-path=${changelog_temp_file} --old-tag=${{ env.CURRENT_VERSION }} --new-tag=${{ env.NEXT_VERSION }}
           delimiter=$(openssl rand -hex 8)
           {
               echo "string<<$delimiter"
@@ -180,6 +191,33 @@ jobs:
       - name: Test print the change log result
         run: |
           echo "changelog: ${{ steps.changelog.outputs.string }}"
+          echo "current_version: ${{ env.CURRENT_VERSION }}"
           echo "next_version: ${{ env.NEXT_VERSION }}"
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"
+
+    - name: 💾 Commit and Tag
+      id: git_commit
+      run: |
+        git config user.email ${{ secrets.CI_EMAIL }}
+        git config user.name ${{ secrets.CI_USER }}
+        git add .
+        git commit -m "[Automated] Release"
+        tag_name="${{ env.NEXT_VERSION }}"
+        git tag -a $tag_name -m "stable release"
+
+    - name: 🔏 Push to protected main branch
+      uses: CasperWA/push-protected@v2.10.0
+      with:
+        token: ${{ env.GITHUB_TOKEN }}
+        branch: main
+        tags: true
+        unprotect_reviews: true
+
+    - name: 🔁 Merge main back to develop
+      uses: everlytic/branch-merge@1.1.0
+      with:
+        github_token: ${{ env.GITHUB_TOKEN }}
+        source_ref: 'main'
+        target_branch: 'develop'
+        commit_message_template: '[Automated] Merged release {source_ref} into {target_branch}'

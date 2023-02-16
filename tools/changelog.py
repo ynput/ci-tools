@@ -612,3 +612,77 @@ def generate_milestone_changelog_cli(milestone):
         file.close()
 
     print(tfile.name)
+
+
+def add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag):
+    """Add new changelog to current changelog file
+
+    Args:
+        new_changelog_path (str): Path to new temp changelog file
+        old_changelog_path (str): Path to current changelog
+                                  file usually `./CHANGELOG.md`
+    """
+    printer.echo("Adding changelog to changelog file...")
+    repo_connect = GithubConnect()
+
+    release_head = f"""
+## [{new_tag}](https://github.com/{repo_connect.repo_path}/tree/{new_tag})
+
+[Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{old_tag}...{new_tag})
+
+"""
+
+    # read new changelog
+    with open(new_changelog_path, "r", encoding="UTF-8") as nf_:
+        new_changelog = nf_.read()
+        nf_.close()
+
+    # write new changelog at beginning of current changelog file
+    with open(old_changelog_path, "r+", encoding="UTF-8") as of_:
+        lines = of_.readlines()
+        start = "".join(lines[0]) + "\n"
+        end = "".join(lines[1:])
+        of_.seek(0)
+        of_.write(start + release_head + new_changelog + '\n' + end)
+        of_.close()
+
+    return True
+
+
+@click.command(
+    name="add-to-changelog-file",
+    help=(
+        "Add changelog to input file"
+    )
+)
+@click.option(
+    "--new-changelog-path", required=True,
+    help="Path to new temp changelog file",
+    type=click.Path()
+)
+@click.option(
+    "--old-changelog-path", required=True,
+    help="Path to current changelog file usually `./CHANGELOG.md`",
+    type=click.Path()
+)
+@click.option(
+    "--old-tag", required=True,
+    help="Current tag version"
+)
+@click.option(
+    "--new-tag", required=True,
+    help="New tag version"
+)
+def add_to_changelog_cli(new_changelog_path, old_changelog_path, new_tag, old_tag):
+    """Add new changelog to current changelog file
+
+    Args:
+        new_changelog_path (str): Path to new temp changelog file
+        old_changelog_path (str): Path to current changelog
+                                  file usually `./CHANGELOG.md`
+        new_tag (str):  New version tag
+        old_tag (str):  Current version tag
+    """
+    print(
+        add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag)
+    )

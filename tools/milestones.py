@@ -26,7 +26,8 @@ from repository import (
 
 printer = Printer()
 
-MILESTONE_COMMIT_DESCRIPTION = "closing-commit-hash:"
+MILESTONE_DESC_COMMIT = "closing-commit-hash:"
+MILESTONE_DESC_TAG = "closing-tag:"
 
 QUERY = """
     query (
@@ -100,6 +101,28 @@ def _get_milestone_from_query_data(data, milestone):
     )
     return milestone_data
 
+def get_element_from_milestone_description(milestone, element):
+    query_back = _run_github_query(milestone)
+    milestone_data = _get_milestone_from_query_data(query_back, milestone)
+
+    if not milestone_data:
+        repo_connect = GithubConnect()
+        raise NameError(
+            f"Input milestone does not exists: '{milestone}'"
+            f" repo: '{repo_connect.repo_path}'"
+        )
+
+    pattern = re.compile(f"(?:({element}\s))([a-z0-9\.]+)")
+    if not milestone_data["description"]:
+        return
+    matching_groups = pattern.findall(milestone_data["description"])
+    if not matching_groups:
+        return
+
+    match = matching_groups.pop()
+    return match[-1]
+
+
 def get_commit_from_milestone_description(milestone):
     """Returns a closing commit sha if
 
@@ -111,23 +134,21 @@ def get_commit_from_milestone_description(milestone):
     Returns:
         str: commit sha
     """
-    query_back = _run_github_query(milestone)
-    milestone_data = _get_milestone_from_query_data(query_back, milestone)
+    return get_element_from_milestone_description(milestone, MILESTONE_DESC_COMMIT)
 
-    if not milestone_data:
-        repo_connect = GithubConnect()
-        raise NameError(
-            f"Input milestone does not exists: '{milestone}'"
-            f" repo: '{repo_connect.repo_path}'"
-        )
 
-    pattern = re.compile(f"(?:({MILESTONE_COMMIT_DESCRIPTION}\s))([a-z0-9]+)")
-    matching_groups = pattern.findall(milestone_data["description"])
-    if not matching_groups:
-        return
+def get_tag_from_milestone_description(milestone):
+    """Returns a closing tag if
 
-    match = matching_groups.pop()
-    return match[-1]
+    it is found in descriptions
+
+    Args:
+        milestone (str): milestone title
+
+    Returns:
+        str: tag name
+    """
+    return get_element_from_milestone_description(milestone, MILESTONE_DESC_TAG)
 
 
 @click.command(
@@ -157,20 +178,56 @@ def get_commit_from_milestone_description_cli(milestone):
         print(commit_sha)
 
 
-def set_commit_to_milestone_description(milestone, commit_sha):
+@click.command(
+    name="get-milestone-tag",
+    help=(
+        "Get closing tag from milestone description"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+def get_tag_from_milestone_description_cli(milestone):
+    """Wrapping cli function
+
+    Returns a closing tag name if
+    it is found in descriptions
+
+    Args:
+        milestone (str): milestone title
+
+    Returns:
+        str: tag name
+    """
+    tag_name = get_tag_from_milestone_description(milestone)
+    if tag_name:
+        print(tag_name)
+
+
+def set_element_to_milestone_description(milestone, element, value):
     query_back = _run_github_query(milestone)
     milestone_data = _get_milestone_from_query_data(query_back, milestone)
 
     if not milestone_data:
         raise NameError(f"Input milestone does not exists: '{milestone}'")
 
-    if get_commit_from_milestone_description(milestone):
+    # avoid duplicity in elements
+    if (
+        "COMMIT" in element
+        and get_commit_from_milestone_description(milestone)
+    ):
+        return False
+    if (
+        "TAG" in element
+        and get_tag_from_milestone_description(milestone)
+    ):
         return False
 
     repo = GithubConnect().remote_repo
     milestone_obj = repo.get_milestone(number=milestone_data["number"])
     milestone_description = milestone_data["description"]
-    commit_line = f"{MILESTONE_COMMIT_DESCRIPTION} {commit_sha}\n"
+    commit_line = f"{element} {value}\n"
     milestone_description = commit_line + milestone_description
     milestone_obj.edit(
         title=milestone_data["title"],
@@ -178,6 +235,14 @@ def set_commit_to_milestone_description(milestone, commit_sha):
         due_on=datetime.now()
     )
     return True
+
+
+def set_commit_to_milestone_description(milestone, commit_sha):
+    return set_element_to_milestone_description(milestone, MILESTONE_DESC_COMMIT, commit_sha)
+
+
+def set_tag_to_milestone_description(milestone, tag_name):
+    return set_element_to_milestone_description(milestone, MILESTONE_DESC_TAG, tag_name)
 
 
 @click.command(
@@ -197,6 +262,26 @@ def set_commit_to_milestone_description(milestone, commit_sha):
 def set_commit_to_milestone_description_cli(milestone, commit_sha):
     print(
         set_commit_to_milestone_description(milestone, commit_sha)
+    )
+
+
+@click.command(
+    name="set-milestone-tag",
+    help=(
+        "Set tag to milestone description"
+    )
+)
+@click.option(
+    "--milestone", required=True,
+    help="Name of milestone > `1.0.1`"
+)
+@click.option(
+    "--tag-name", required=True,
+    help="The tag name which should be added to milestone"
+)
+def set_tag_to_milestone_description_cli(milestone, tag_name):
+    print(
+        set_tag_to_milestone_description(milestone, tag_name)
     )
 
 

@@ -6,17 +6,21 @@ from utils import Printer
 
 from changelog import (
     generate_milestone_changelog_cli,
-    assign_milestone_to_issue_cli
+    assign_milestone_to_issue_cli,
+    add_to_changelog_cli
 )
 from environment import set_pyenv_python_version
 from milestones import (
     get_commit_from_milestone_description_cli,
+    get_tag_from_milestone_description_cli,
     set_commit_to_milestone_description_cli,
+    set_tag_to_milestone_description_cli,
     set_changelog_to_milestone_description_cli,
     set_new_milestone_title_cli
 )
 from versioning import (
     bump_version_cli,
+    current_version_cli,
     bump_file_versions_cli
 )
 from repository import (
@@ -35,7 +39,7 @@ def changelog():
 
 changelog.add_command(generate_milestone_changelog_cli)
 changelog.add_command(assign_milestone_to_issue_cli)
-
+changelog.add_command(add_to_changelog_cli)
 
 @click.group()
 def env():
@@ -55,7 +59,9 @@ def milestones():
     printer.echo("milestones commands activated...")
 
 milestones.add_command(get_commit_from_milestone_description_cli)
+milestones.add_command(get_tag_from_milestone_description_cli)
 milestones.add_command(set_commit_to_milestone_description_cli)
+milestones.add_command(set_tag_to_milestone_description_cli)
 milestones.add_command(set_changelog_to_milestone_description_cli)
 milestones.add_command(set_new_milestone_title_cli)
 
@@ -65,6 +71,7 @@ def versioning():
     printer.echo("Versioning commands activated...")
 
 versioning.add_command(bump_version_cli)
+versioning.add_command(current_version_cli)
 versioning.add_command(bump_file_versions_cli)
 
 

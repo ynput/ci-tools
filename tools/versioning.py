@@ -84,9 +84,14 @@ def bump_file_versions_cli(version, version_path, pyproject_path):
     bump_file_versions(version, version_path, pyproject_path)
 
 
-def bump_version(type, part):
+def current_version(type):
     last_release, _ = get_last_version(type)
-    last_release_v = VersionInfo.parse(last_release)
+    return last_release
+
+
+def bump_version(type, part):
+    current_version_ = current_version(type)
+    last_release_v = VersionInfo.parse(current_version_)
     return last_release_v.next_version(part)
 
 
@@ -110,3 +115,20 @@ def bump_version(type, part):
 def bump_version_cli(type, part):
     new_version = bump_version(type, part)
     print(new_version)
+
+
+
+@click.command(
+    name="current-version",
+    help=(
+        "Current version number from latest found tag in repository."
+    )
+)
+@click.option(
+    "--type", required=True,
+    help="Type of version tag (CI or release)"
+)
+def current_version_cli(type):
+    print(
+        current_version(type)
+    )
