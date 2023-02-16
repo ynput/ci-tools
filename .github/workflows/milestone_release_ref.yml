@@ -156,8 +156,8 @@ jobs:
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           NEXT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-version --type=release --part=patch)
           CURRENT_VERSION=$(python ${{ env.ci-tools-workdir }}/tools/cli.py versioning current-version --type=release)
-          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-title --milestone=${{ inputs.milestone }} --new-title=${NEXT_VERSION}
           python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-tag --milestone=${{ inputs.milestone }} --tag-name=${CURRENT_VERSION}
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-title --milestone=${{ inputs.milestone }} --new-title=${NEXT_VERSION}
 
           echo "NEXT_VERSION=${NEXT_VERSION}" >> $GITHUB_ENV
           echo "CURRENT_VERSION=${CURRENT_VERSION}" >> $GITHUB_ENV
