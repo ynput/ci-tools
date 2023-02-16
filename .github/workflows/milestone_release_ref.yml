@@ -50,7 +50,7 @@ jobs:
           echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
-          echo "test-var: ${{ env.test-var }}"
+          echo "test-var: ${{ env.test_var }}"
 
       #----------------------------------------------
       #      check out to ci tools repo
