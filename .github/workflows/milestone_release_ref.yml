@@ -71,7 +71,7 @@ jobs:
           repository: ynput/ci-tools
           ref: main
           path: ./ci-tools
-        run: mv ${{ github.workspace }}/ci-tools ${{ env.ci-tools-workdir }}
+
       #----------------------------------------------
       # set-up python
       #----------------------------------------------
@@ -81,8 +81,12 @@ jobs:
         with:
           python-version: '3.10'
 
-      - name: Test CI Tools work dir content
+      #----------------------------------------------
+      # move ci tools cloned files to different folder
+      #----------------------------------------------
+      - name: Move CI Tools work dir content
         run: |
+          mv ${{ github.workspace }}/ci-tools ${{ env.ci-tools-workdir }}
           cd "${{ env.ci-tools-workdir }}"
           ls -l
 
