@@ -39,7 +39,7 @@ jobs:
   generate-milestone-changelog:
     runs-on: ubuntu-latest
     env:
-      ci-tools-workdir: ${{ github.workspace }}/ci-tools
+      ci-tools-workdir: /home/runner/work/ci-tools
       base-branch: "develop"
     steps:
       #----------------------------------------------
@@ -71,7 +71,7 @@ jobs:
           repository: ynput/ci-tools
           ref: main
           path: ./ci-tools
-
+        run: mv ${{ github.workspace }}/ci-tools ${{ env.ci-tools-workdir }}
       #----------------------------------------------
       # set-up python
       #----------------------------------------------
