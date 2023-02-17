@@ -299,6 +299,10 @@ def set_changelog_to_milestone_description(milestone, changelog_path):
     repo = GithubConnect().remote_repo
     milestone_obj = repo.get_milestone(number=milestone_data["number"])
     milestone_description = milestone_data["description"]
+
+    if changelog in milestone_description:
+        return False
+
     milestone_description = milestone_description + changelog
     milestone_obj.edit(
         title=milestone_data["title"],

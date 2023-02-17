@@ -143,12 +143,17 @@ jobs:
             python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-commit --milestone=${{ inputs.milestone }} --commit-sha=${{ steps.baseBranchCommit.outputs.commit }}
 
       #----------------------------------------------
-      #      check out to ci tools repo
+      # merge base branch (develop) to main
+      #    only if not commit in milestone
       #----------------------------------------------
-      - name: Checkout Workspace repo to commit
-        uses: actions/checkout@v3
+      - name: 🔨 Merge develop to main
+        if: steps.milestoneCommit.outputs.commit == ''
+        uses: everlytic/branch-merge@1.1.0
         with:
-          ref: ${{ steps.baseBranchCommit.outputs.commit }}
+          github_token: ${{ env.GITHUB_TOKEN }}
+          source_ref: ${{ env.base-branch }}
+          target_branch: 'main'
+          commit_message_template: '[Automated] Merged {source_ref} into {target_branch}'
 
       #----------------------------------------------
       # get next available version from tags if
@@ -227,17 +232,9 @@ jobs:
         uses: CasperWA/push-protected@v2.10.0
         with:
           token: ${{ env.GITHUB_TOKEN }}
-          branch: develop
+          branch: main
           tags: true
           unprotect_reviews: true
-
-      - name: 🔨 Merge develop to main
-        uses: everlytic/branch-merge@1.1.0
-        with:
-          github_token: ${{ env.GITHUB_TOKEN }}
-          source_ref: 'develop'
-          target_branch: 'main'
-          commit_message_template: '[Automated] Merged {source_ref} into {target_branch}'
 
       - name: 🔁 Merge main back to develop
         uses: everlytic/branch-merge@1.1.0
@@ -246,3 +243,13 @@ jobs:
           source_ref: 'main'
           target_branch: 'develop'
           commit_message_template: '[Automated] Merged release {source_ref} into {target_branch}'
+
+      # ----------------------------------------------
+      # make tag release
+      # ---------------------------------------------
+      - name: 🚀 Github Release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ env.NEXT_VERSION }}
+          body: ${{ steps.changelog.outputs.string }}
+          token: ${{ env.GITHUB_TOKEN }}

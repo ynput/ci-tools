@@ -655,6 +655,10 @@ def add_to_changelog(new_changelog_path, old_changelog_path):
 
     # write new changelog at beginning of current changelog file
     with open(old_changelog_path, "r+", encoding="UTF-8") as of_:
+        old_new_changelog = nf_.read()
+        if new_changelog in old_new_changelog:
+            return False
+
         lines = of_.readlines()
         start = "".join(lines[0]) + "\n"
         end = "".join(lines[1:])
