@@ -659,6 +659,8 @@ def add_to_changelog(new_changelog_path, old_changelog_path):
         if new_changelog in old_new_changelog:
             return False
 
+        # move cursor back to top
+        of_.seek(0)
         lines = of_.readlines()
         start = "".join(lines[0]) + "\n"
         end = "".join(lines[1:])
