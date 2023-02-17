@@ -160,7 +160,8 @@ jobs:
       #----------------------------------------------
       - name: Checkout Workspace repo to main
         uses: actions/checkout@v3
-
+        with:
+          ref: main
       #----------------------------------------------
       # get next available version from tags if
       # if milestone title still `next-` and not version
