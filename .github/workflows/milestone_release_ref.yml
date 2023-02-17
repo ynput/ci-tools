@@ -155,6 +155,12 @@ jobs:
           target_branch: 'main'
           commit_message_template: '[Automated] Merged {source_ref} into {target_branch}'
 
+       #----------------------------------------------
+      #      check out to ci tools repo
+      #----------------------------------------------
+      - name: Checkout Workspace repo to commit
+        uses: actions/checkout@v3
+
       #----------------------------------------------
       # get next available version from tags if
       # if milestone title still `next-` and not version
