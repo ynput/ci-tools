@@ -206,6 +206,8 @@ jobs:
           echo "next_version: ${{ env.NEXT_VERSION }}"
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"
+          echo "user.email: ${{ secrets.CI_EMAIL }}"
+          echo "user.name: ${{ secrets.CI_USER }}"
 
       - name: 💾 Commit and Tag
         id: git_commit
