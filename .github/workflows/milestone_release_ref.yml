@@ -34,6 +34,10 @@ on:
     secrets:
       token:
         required: true
+      user_email:
+        required: true
+      user_name:
+        required: true
 
 jobs:
   generate-milestone-changelog:
@@ -206,14 +210,14 @@ jobs:
           echo "next_version: ${{ env.NEXT_VERSION }}"
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"
-          echo "user.email: ${{ secrets.CI_EMAIL }}"
-          echo "user.name: ${{ secrets.CI_USER }}"
+          echo "user.email: ${{ secrets.user_email }}"
+          echo "user.name: ${{ secrets.user_name }}"
 
       - name: 💾 Commit and Tag
         id: git_commit
         run: |
-          git config user.email ${{ secrets.CI_EMAIL }}
-          git config user.name ${{ secrets.CI_USER }}
+          git config user.email ${{ secrets.user_email }}
+          git config user.name ${{ secrets.user_name }}
           git add .
           git commit -m "[Automated] Release"
           tag_name="${{ env.NEXT_VERSION }}"
