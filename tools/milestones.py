@@ -228,7 +228,11 @@ def set_element_to_milestone_description(milestone, element, value):
     milestone_obj = repo.get_milestone(number=milestone_data["number"])
     milestone_description = milestone_data["description"]
     commit_line = f"{element} {value}\n"
-    milestone_description = commit_line + milestone_description
+    new_description = commit_line
+
+    if milestone_description:
+        new_description += milestone_description
+
     milestone_obj.edit(
         title=milestone_data["title"],
         description=milestone_description,
