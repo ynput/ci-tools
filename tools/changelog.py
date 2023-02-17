@@ -571,14 +571,29 @@ def assign_milestone_to_issue_cli(milestone_id, issue_id):
     assign_milestone_to_issue(milestone_id, issue_id)
 
 
-def generate_milestone_changelog(milestone):
+def generate_milestone_changelog(milestone, new_tag, old_tag):
     """Generate changelog from input milestone
 
     Args:
         milestone (str): milestone name
+        new_tag (str):  New version tag
+        old_tag (str):  Current version tag
     """
+    repo_connect = GithubConnect()
+
+    release_head = f"""
+## [{new_tag}](https://github.com/{repo_connect.repo_path}/tree/{new_tag})
+
+[Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{new_tag}...{old_tag})
+
+"""
+
     changelog = ChangeLogMilestoneProcessor(milestone)
-    return changelog.generate()
+
+    # join head with changelog
+    changelog_str = release_head + changelog.generate()
+
+    return changelog_str
 
 
 @click.command(
@@ -592,17 +607,27 @@ def generate_milestone_changelog(milestone):
     "--milestone", required=True,
     help="Name of milestone > `1.0.1`"
 )
-def generate_milestone_changelog_cli(milestone):
+@click.option(
+    "--old-tag", required=True,
+    help="Current tag version"
+)
+@click.option(
+    "--new-tag", required=True,
+    help="New tag version"
+)
+def generate_milestone_changelog_cli(milestone, new_tag, old_tag):
     """Wrapping cli function
 
     Generate changelog from input milestone
 
     Args:
         milestone (str): milestone name
+        new_tag (str):  New version tag
+        old_tag (str):  Current version tag
     """
     printer.echo("Generating changelog from milestone...")
 
-    changelong_str = generate_milestone_changelog(milestone)
+    changelong_str = generate_milestone_changelog(milestone, new_tag, old_tag)
 
     tfile = tempfile.NamedTemporaryFile(mode="w+", encoding="UTF-8")
     tfile.close()
@@ -614,7 +639,7 @@ def generate_milestone_changelog_cli(milestone):
     print(tfile.name)
 
 
-def add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag):
+def add_to_changelog(new_changelog_path, old_changelog_path):
     """Add new changelog to current changelog file
 
     Args:
@@ -623,15 +648,6 @@ def add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag):
                                   file usually `./CHANGELOG.md`
     """
     printer.echo("Adding changelog to changelog file...")
-    repo_connect = GithubConnect()
-
-    release_head = f"""
-## [{new_tag}](https://github.com/{repo_connect.repo_path}/tree/{new_tag})
-
-[Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{old_tag}...{new_tag})
-
-"""
-
     # read new changelog
     with open(new_changelog_path, "r", encoding="UTF-8") as nf_:
         new_changelog = nf_.read()
@@ -643,7 +659,7 @@ def add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag):
         start = "".join(lines[0]) + "\n"
         end = "".join(lines[1:])
         of_.seek(0)
-        of_.write(start + release_head + new_changelog + '\n' + end)
+        of_.write(start + new_changelog + '\n' + end)
         of_.close()
 
     return True
@@ -665,24 +681,14 @@ def add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag):
     help="Path to current changelog file usually `./CHANGELOG.md`",
     type=click.Path()
 )
-@click.option(
-    "--old-tag", required=True,
-    help="Current tag version"
-)
-@click.option(
-    "--new-tag", required=True,
-    help="New tag version"
-)
-def add_to_changelog_cli(new_changelog_path, old_changelog_path, new_tag, old_tag):
+def add_to_changelog_cli(new_changelog_path, old_changelog_path):
     """Add new changelog to current changelog file
 
     Args:
         new_changelog_path (str): Path to new temp changelog file
         old_changelog_path (str): Path to current changelog
                                   file usually `./CHANGELOG.md`
-        new_tag (str):  New version tag
-        old_tag (str):  Current version tag
     """
     print(
-        add_to_changelog(new_changelog_path, old_changelog_path, new_tag, old_tag)
+        add_to_changelog(new_changelog_path, old_changelog_path)
     )
