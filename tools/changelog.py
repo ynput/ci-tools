@@ -15,6 +15,7 @@
 """
 
 from copy import deepcopy
+import re
 import requests
 import click
 import tempfile
@@ -296,11 +297,15 @@ class ChangeLogMilestoneProcessor:
         SectionItems("### **🐛 Bug fixes**", "bug"),
         SectionItems("### **🔀 Refactored code**", "refactor"),
         SectionItems("### **📃 Documentation**", "documentation"),
+        SectionItems("### **📃 Testing**", "unittest"),
         SectionItems("### **Merged pull requests**", "*")
     ]
     domains: list[DomaineItems] = [
-        DomaineItems("3d", ["maya", "houdini", "unreal"]),
-        DomaineItems("2d", ["nuke", "fusion"]),
+        DomaineItems("3d", ["maya", "houdini", "ue", "3dsmax", "blender"]),
+        DomaineItems("2d", [
+            "nuke", "fusion", "tv paint",
+            "after effects", "harmony", "photoshop"
+        ]),
         DomaineItems("editorial", ["hiero", "flame", "resolve"]),
         DomaineItems("other", ["*"])
     ]
@@ -315,7 +320,7 @@ class ChangeLogMilestoneProcessor:
                             title
                             url
                             number
-                            pullRequests(states:[OPEN, MERGED]){
+                            pullRequests(states:[OPEN, MERGED], first: 1000){
                                 nodes{
                                     title
                                     body
@@ -396,33 +401,45 @@ class ChangeLogMilestoneProcessor:
         return request.json()
 
     def _populate_sections(self):
+        all_labels = [sec.label for sec in self.sections if "*" not in sec.label]
         for pull in self._pullrequests:
             for section in self.sections:
-                # TODO: need to do regex check
-                if section.label in pull.types:
+                if section.label != "*" and any(re.match(section.label, type_) for type_ in pull.types):
+                    section.pull_append(pull)
+                    break
+                elif section.label == "*" and not any(True for type_ in pull.types if type_ in all_labels):
                     section.pull_append(pull)
                     break
 
     def _sort_by_hosts(self):
         for section in self.sections:
+            print(section)
             new_order: list[PullRequestDescription] = []
             pulls = deepcopy(section.pulls)
 
             for domain in self.domains:
                 for host in domain.hosts:
                     for pr_ in pulls:
-                        # TODO: regex check `*`
                         if host in pr_.hosts:
-                            # add domane to item
+                            # add domaine to item
                             pr_.domain = domain.name
                             # add to reorder
-                            new_order.append(pr_)
-                            # dont duplicate and remove item
-                            pulls = [
-                                p_ for p_ in section.pulls
-                                if p_.title != pr_.title
-                            ]
+                            if pr_ not in new_order:
+                                new_order.append(pr_)
+                                # dont duplicate and remove item
+                                pulls.remove(pr_)
+                    if host == "*" and pulls:
+                        for pr_ in pulls:
+                            # add domaine to item
+                            pr_.domain = domain.name
+                            # add to reorder
+                            if pr_ not in new_order:
+                                new_order.append(pr_)
+                                # dont duplicate and remove item
+                                pulls.remove(pr_)
 
+            print(f"_ rest pulls: {pulls}")
+            print(f"_ new_order: {new_order}")
             section.pulls = new_order
 
     def _get_changelog_item_from_template(self, pull: PullRequestDescription):
