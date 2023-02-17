@@ -224,9 +224,10 @@ jobs:
           echo "baseBranchCommit: ${{ steps.baseBranchCommit.outputs.commit }}"
           echo "user.email: ${{ secrets.user_email }}"
           echo "user.name: ${{ secrets.user_name }}"
+          echo "updated: ${{ steps.changelog.outputs.updated }}"
 
       - name: 💾 Commit and Tag
-        if: steps.changelog.outputs.updated == true
+        if: ${{ steps.changelog.outputs.updated }}
         id: gitCommit
         run: |
           git config user.email ${{ secrets.user_email }}
@@ -237,7 +238,7 @@ jobs:
           git tag -a $tag_name -m "stable release"
 
       - name: 🔏 Push to protected main branch
-        if: steps.changelog.outputs.updated == true
+        if: ${{ steps.changelog.outputs.updated }}
         uses: CasperWA/push-protected@v2.10.0
         with:
           token: ${{ env.GITHUB_TOKEN }}
@@ -246,7 +247,7 @@ jobs:
           unprotect_reviews: true
 
       - name: 🔁 Merge main back to develop
-        if: steps.changelog.outputs.updated == true
+        if: ${{ steps.changelog.outputs.updated }}
         uses: everlytic/branch-merge@1.1.0
         with:
           github_token: ${{ env.GITHUB_TOKEN }}
