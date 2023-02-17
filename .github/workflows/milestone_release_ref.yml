@@ -195,8 +195,8 @@ jobs:
           source ${{ env.ci-tools-workdir }}/.venv/bin/activate
 
           changelog_temp_file=$(python ${{ env.ci-tools-workdir }}/tools/cli.py changelog generate-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --old-tag=${{ env.CURRENT_VERSION }} --new-tag=${{ env.NEXT_VERSION }})
-          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --changelog-path=${changelog_temp_file}
-          python ${{ env.ci-tools-workdir }}/tools/cli.py changelog add-to-changelog-file --old-changelog-path=./CHANGELOG.md  --new-changelog-path=${changelog_temp_file}
+          python ${{ env.ci-tools-workdir }}/tools/cli.py milestones set-milestone-changelog --milestone=${{ env.NEXT_VERSION }} --changelog-path=${{ changelog_temp_file }}
+          python ${{ env.ci-tools-workdir }}/tools/cli.py changelog add-to-changelog-file --old-changelog-path=./CHANGELOG.md  --new-changelog-path=${{ changelog_temp_file }}
           python ${{ env.ci-tools-workdir }}/tools/cli.py versioning bump-file-version --version=${{ env.NEXT_VERSION }} --version-path=${{ inputs.version-py-path }} --pyproject-path=${{ inputs.pyproject-path }}
 
           delimiter=$(openssl rand -hex 8)
