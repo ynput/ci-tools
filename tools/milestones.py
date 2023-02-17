@@ -235,7 +235,7 @@ def set_element_to_milestone_description(milestone, element, value):
 
     milestone_obj.edit(
         title=milestone_data["title"],
-        description=milestone_description,
+        description=new_description,
         due_on=datetime.now()
     )
     return True
