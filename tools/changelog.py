@@ -278,8 +278,6 @@ class DomaineItems:
 class ChangeLogMilestoneProcessor:
     repo_connect = GithubConnect()
 
-    pullrequest_items_limit = 10
-
     domain_color = "#367F6C"
     domain_bold = False
     domain_cursive = True
@@ -309,7 +307,7 @@ class ChangeLogMilestoneProcessor:
 
     query = """
             query (
-                $owner: String!, $repo_name: String!, $milestone: String!, $num_prs: Int!
+                $owner: String!, $repo_name: String!, $milestone: String!
             ){
                 repository(owner: $owner, name: $repo_name) {
                     milestones(query: $milestone, first: 1) {
@@ -317,7 +315,7 @@ class ChangeLogMilestoneProcessor:
                             title
                             url
                             number
-                            pullRequests(states:[OPEN, MERGED], first: $num_prs){
+                            pullRequests(states:[OPEN, MERGED]){
                                 nodes{
                                     title
                                     body
@@ -373,8 +371,7 @@ class ChangeLogMilestoneProcessor:
         variables = {
             "owner": self.repo_connect.owner,
             "repo_name": self.repo_connect.name,
-            "milestone": milestone,
-            "num_prs": self.pullrequest_items_limit
+            "milestone": milestone
         }
 
         try:
