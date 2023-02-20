@@ -166,12 +166,12 @@ class PullRequestDescription:
 
         text = ""
         for header, paragraph in parsed_body.items():
-            text += f"## {header}\r\n"
+            text += f"#### {header}\n"
             if isinstance(paragraph, list):
                 for s_ in paragraph:
                     text += "".join(s_)
-                text += """\r\n\r\n"""
-                text = text.lstrip("\r\n")
+                text += """\n\n"""
+                text = text.lstrip("\n")
 
         return text
 
@@ -211,7 +211,7 @@ class PullRequestDescription:
             if input.get('type') == "paragraph":
                 return_list.append(nested_list)
             elif input.get("type") == "block_text":
-                return_list.extend(("\r\n- ", nested_list))
+                return_list.extend(("\n- ", nested_list))
             else:
                 return_list.extend(nested_list)
 
@@ -227,9 +227,9 @@ class PullRequestDescription:
             elif type_ == "block_code":
                 info = input.get("info")
                 if info:
-                    text = f"\r\n\r\n```{info}\r\n" + text.replace("\n", "\r\n") + "```"
+                    text = f"\n```{info}\n" + text + "```"
                 else:
-                    text = f"```\r\n" + text.replace("\n", "\r\n") + "```"
+                    text = f"\n```\n" + text + "```"
             # condition for text with line endings
             if "\n" in text and type_ != "block_code":
                 return_list.extend(text.split("\n"))
@@ -413,7 +413,6 @@ class ChangeLogMilestoneProcessor:
 
     def _sort_by_hosts(self):
         for section in self.sections:
-            print(section)
             new_order: list[PullRequestDescription] = []
             pulls = deepcopy(section.pulls)
 
@@ -438,8 +437,6 @@ class ChangeLogMilestoneProcessor:
                                 # dont duplicate and remove item
                                 pulls.remove(pr_)
 
-            print(f"_ rest pulls: {pulls}")
-            print(f"_ new_order: {new_order}")
             section.pulls = new_order
 
     def _get_changelog_item_from_template(self, pull: PullRequestDescription):
@@ -505,7 +502,7 @@ ___
 {body}
 ___
 
-</details>\r\n
+</details>\n
 """
 
     def generate(self):
@@ -514,7 +511,7 @@ ___
             if not section.pulls:
                 continue
 
-            out_text += section.title + "\r\n\r\n"
+            out_text += section.title + "\n\n"
             for pull in section.pulls:
                 out_text += self._get_changelog_item_from_template(pull)
 
@@ -597,7 +594,7 @@ def generate_milestone_changelog(milestone, new_tag, old_tag):
     release_head = f"""
 ## [{new_tag}](https://github.com/{repo_connect.repo_path}/tree/{new_tag})
 
-[Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{new_tag}...{old_tag})
+[Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{old_tag}...{new_tag})
 
 """
 
