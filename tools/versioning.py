@@ -1,5 +1,6 @@
 import re
 import click
+import tomlkit
 from semver import VersionInfo
 from repository import GithubConnect
 
@@ -41,7 +42,7 @@ def get_last_version(type):
         return tag, tag
 
 
-def file_regex_replace(filename, regex, version):
+def file_regex_replace_py(filename, regex, version):
     with open(filename, 'r+') as f:
         text = f.read()
         text = re.sub(regex, version, text)
@@ -50,16 +51,25 @@ def file_regex_replace(filename, regex, version):
         f.write(text)
         f.truncate()
 
+def file_regex_replace_toml(filename, version):
+    with open(filename,'r') as fr:
+        data = tomlkit.load(fr)
+
+    # Modify only version
+    data["tool"]["poetry"]["version"] = str(version)
+
+    with open(filename,'w') as fw:
+        tomlkit.dump(data, fw)
+
+
 
 def bump_file_versions(version, version_path, pyproject_path):
 
     regex = "(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?"
-    file_regex_replace(version_path, regex, version)
+    file_regex_replace_py(version_path, regex, version)
 
     # bump pyproject.toml
-    regex = "version = \"(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(\+((0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*)(\.(0|[1-9]\d*|\d*[a-zA-Z-][0-9a-zA-Z-]*))*))?(\+([0-9a-zA-Z-]+(\.[0-9a-zA-Z-]+)*))?\""
-    pyproject_version = f"version = \"{version}\""
-    file_regex_replace(pyproject_path, regex, pyproject_version)
+    file_regex_replace_toml(pyproject_path, version)
 
 
 @click.command(
