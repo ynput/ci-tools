@@ -499,13 +499,12 @@ class ChangeLogMilestoneProcessor:
         return f"""
 <details>
 <summary>{title} ({tags}) - {url}</summary>
-\r\n
+
 ___
-\r\n
+
 {body}
-\r\n
 ___
-\r\n
+
 </details>\r\n
 """
 
