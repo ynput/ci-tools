@@ -166,12 +166,25 @@ class PullRequestDescription:
 
         text = ""
         for header, paragraph in parsed_body.items():
-            text += f"#### {header}\n"
+            strong = False
+            if header == "Brief description":
+                # make paragraph in markdown strong text
+                strong = True
+
+            # make strong text if activated
+            if strong:
+                text += "<strong>"
+
+            # print paragraph
             if isinstance(paragraph, list):
                 for s_ in paragraph:
                     text += "".join(s_)
                 text += """\n\n"""
                 text = text.lstrip("\n")
+
+            # close strong text if activated
+            if strong:
+                text += "</strong>"
 
         return text
 
@@ -495,9 +508,7 @@ class ChangeLogMilestoneProcessor:
         # format template and return
         return f"""
 <details>
-<summary>{title} ({tags}) - {url}</summary>
-
-___
+<summary>{title} {url}</summary>
 
 {body}
 ___
@@ -592,8 +603,6 @@ def generate_milestone_changelog(milestone, new_tag, old_tag):
     repo_connect = GithubConnect()
 
     release_head = f"""
-## [{new_tag}](https://github.com/{repo_connect.repo_path}/tree/{new_tag})
-
 [Full Changelog](https://github.com/{repo_connect.repo_path}/compare/{old_tag}...{new_tag})
 
 """
