@@ -128,7 +128,8 @@ class PullRequestDescription:
         processing_headers = {}
         headers = [
             "Brief description",
-            "Description"
+            "Description",
+            "Changelog Description"
         ]
         markdown = mistune.create_markdown(renderer="ast")
         markdown_obj = markdown(self.body)
