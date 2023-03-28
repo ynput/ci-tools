@@ -341,7 +341,7 @@ class ChangeLogMilestoneProcessor:
                                     state
                                     url
                                     number
-                                    labels(first: 5){
+                                    labels(first: 100){
                                         nodes{
                                             name
                                             color
@@ -370,6 +370,7 @@ class ChangeLogMilestoneProcessor:
             pull = PullRequestDescription(**pr_)
             self._pullrequests.append(pull)
 
+        printer.echo(f"Amount or Collected PRs {len(self._pullrequests)}")
         printer.echo(f"Collected PRs {pformat(self._pullrequests)}")
 
         self._populate_sections()
@@ -417,6 +418,7 @@ class ChangeLogMilestoneProcessor:
     def _populate_sections(self):
         all_labels = [sec.label for sec in self.sections if "*" not in sec.label]
         for pull in self._pullrequests:
+            printer.echo(f"Pull {pull.number}:'{pull.title}' / {pull.types}")
             for section in self.sections:
                 if section.label != "*" and any(re.match(section.label, type_) for type_ in pull.types):
                     section.pull_append(pull)
@@ -432,6 +434,7 @@ class ChangeLogMilestoneProcessor:
 
             for domain in self.domains:
                 for host in domain.hosts:
+                    # order by known host at domain hosts
                     for pr_ in pulls:
                         if host in pr_.hosts:
                             # add domaine to item
@@ -441,6 +444,8 @@ class ChangeLogMilestoneProcessor:
                                 new_order.append(pr_)
                                 # dont duplicate and remove item
                                 pulls.remove(pr_)
+
+                    # order by wildcard at domain hosts
                     if host == "*" and pulls:
                         for pr_ in pulls:
                             # add domaine to item
@@ -450,6 +455,13 @@ class ChangeLogMilestoneProcessor:
                                 new_order.append(pr_)
                                 # dont duplicate and remove item
                                 pulls.remove(pr_)
+
+                    # if no order could be made, add rest to the end
+                    if pulls:
+                        for pr_ in pulls:
+                            if pr_ in new_order:
+                                continue
+                            new_order.append(pr_)
 
             section.pulls = new_order
 
