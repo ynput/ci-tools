@@ -27,5 +27,8 @@
 - Set changelog to milestone
 `python .\tools\cli.py milestones set-milestone-changelog --milestone=next-minor --changelog-path=/tmp/oanneq7asdfe`
 
+- Generate changelog to temp file
+`python .\tools\cli.py changelog generate-milestone-changelog --milestone=3.15.2 --old-tag=3.15.1 --new-tag=3.15.2`
+
 - Add changelong to current changelog file
-`python .\tools\cli.py changelog add-to-changelog-file --old-changelog-path=./CHANGELOG.md  --new-changelog-path=/Temp/tmpzye6axex --old-tag=3.1.2 --new-tag=3.2.0`
+`python .\tools\cli.py changelog add-to-changelog-file --old-changelog-path=./CHANGELOG.md  --new-changelog-path=/Temp/tmpzye6axex --tag=3.1.2`
