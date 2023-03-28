@@ -659,15 +659,23 @@ def generate_milestone_changelog_cli(milestone, new_tag, old_tag):
     print(tfile.name)
 
 
-def add_to_changelog(new_changelog_path, old_changelog_path):
+def add_to_changelog(new_changelog_path, old_changelog_path, tag):
     """Add new changelog to current changelog file
 
     Args:
         new_changelog_path (str): Path to new temp changelog file
         old_changelog_path (str): Path to current changelog
                                   file usually `./CHANGELOG.md`
+        tag (str): New tag version
     """
     printer.echo("Adding changelog to changelog file...")
+    repo_connect = GithubConnect()
+
+    release_head = f"""
+## [{tag}](https://github.com/{repo_connect.repo_path}/tree/{tag})
+
+"""
+
     # read new changelog
     with open(new_changelog_path, "r", encoding="UTF-8") as nf_:
         new_changelog = nf_.read()
@@ -685,7 +693,7 @@ def add_to_changelog(new_changelog_path, old_changelog_path):
         start = "".join(lines[0]) + "\n"
         end = "".join(lines[1:])
         of_.seek(0)
-        of_.write(start + new_changelog + '\n' + end)
+        of_.write(start + release_head + new_changelog + '\n' + end)
         of_.close()
 
     return True
@@ -707,14 +715,19 @@ def add_to_changelog(new_changelog_path, old_changelog_path):
     help="Path to current changelog file usually `./CHANGELOG.md`",
     type=click.Path()
 )
-def add_to_changelog_cli(new_changelog_path, old_changelog_path):
+@click.option(
+    "--tag", required=True,
+    help="New tag version"
+)
+def add_to_changelog_cli(new_changelog_path, old_changelog_path, tag):
     """Add new changelog to current changelog file
 
     Args:
         new_changelog_path (str): Path to new temp changelog file
         old_changelog_path (str): Path to current changelog
                                   file usually `./CHANGELOG.md`
+        tag (str):  New version tag
     """
     print(
-        add_to_changelog(new_changelog_path, old_changelog_path)
+        add_to_changelog(new_changelog_path, old_changelog_path, tag)
     )
