@@ -156,6 +156,7 @@ async def milestone_prs_to_clickup(context, milestone):
 
     async with aiohttp.ClientSession() as session:
         tasks = []
+        print("Total PRs: ", len(milestone_prs_proc.pulls))
         for pr_ in milestone_prs_proc.pulls:
             printer.echo("__________________")
             clickup_custom_id = None
@@ -178,7 +179,7 @@ async def milestone_prs_to_clickup(context, milestone):
                 f"/field/{field_id}"
             )
             printer.echo(f"Processing PR: '{pr_.number}' / '{pr_.get_title()}' / '{pr_.head_ref}'")
-            printer.echo(f"Requesting {url}")
+            print(f"PR: '{pr_.number}' to CU Task: '{clickup_custom_id}'")
 
             # add task to list for later async execution
             tasks.append(
@@ -192,7 +193,8 @@ async def milestone_prs_to_clickup(context, milestone):
             for answers in put_answers:
                 printer.echo(answers)
 
-        printer.echo(f"Skipped PRs: {' '.join(skipping_prs)}")
+        print(f"Skipped PRs: {' '.join(skipping_prs)}")
+        print("Total skipped PRs: ", len(skipping_prs))
 
 @click.command(
     name="prs-to-clickup",
