@@ -27,6 +27,9 @@ from repository import (
     GithubConnect,
     get_latest_commit_cli
 )
+from project_management import (
+    milestone_prs_to_clickup_cli
+)
 
 load_dotenv()
 
@@ -40,6 +43,14 @@ def changelog():
 changelog.add_command(generate_milestone_changelog_cli)
 changelog.add_command(assign_milestone_to_issue_cli)
 changelog.add_command(add_to_changelog_cli)
+
+
+@click.group()
+def project():
+    printer.echo("Project commands activated...")
+
+project.add_command(milestone_prs_to_clickup_cli)
+
 
 @click.group()
 def env():
@@ -96,6 +107,9 @@ def cli(ctx, debug, github_token=None, repo_owner=None, repo_name=None):
     ctx.ensure_object(dict)
 
     ctx.obj["DEBUG"] = debug
+    ctx.obj["CLICKUP_API_KEY"] = os.getenv("CLICKUP_API_KEY")
+    ctx.obj["CLICKUP_RELEASE_FIELD_ID"] = os.getenv("CLICKUP_RELEASE_FIELD_ID")
+    ctx.obj["CLICKUP_TEAM_ID"] = os.getenv("CLICKUP_TEAM_ID")
     Printer.set_context(ctx)
 
     github_token = github_token or os.getenv("GITHUB_TOKEN")
@@ -105,6 +119,7 @@ def cli(ctx, debug, github_token=None, repo_owner=None, repo_name=None):
     GithubConnect.set_attributes(repo_owner, repo_name, github_token)
 
 cli.add_command(changelog)
+cli.add_command(project)
 cli.add_command(env)
 cli.add_command(repo)
 cli.add_command(versioning)
