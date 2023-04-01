@@ -1,4 +1,5 @@
 import re
+import platform
 import click
 import requests
 import asyncio
@@ -127,6 +128,11 @@ class MilestonePRProcessor:
 
         return request.json()
 
+async def put_clickup_request(session, url, headers, payload, query):
+    async with session.post(url, json=payload, headers=headers, params=query ) as resp:
+            response = await resp.json()
+            printer.echo(pformat(response))
+
 async def milestone_prs_to_clickup(context, milestone):
 
     skipping_prs = []
@@ -149,7 +155,7 @@ async def milestone_prs_to_clickup(context, milestone):
     printer.echo(f"{query}")
 
     async with aiohttp.ClientSession() as session:
-
+        tasks = []
         for pr_ in milestone_prs_proc.pulls:
             printer.echo("__________________")
             clickup_custom_id = None
@@ -167,16 +173,25 @@ async def milestone_prs_to_clickup(context, milestone):
                 "value": milestone
             }
 
-            clickup_req = (
+            url = (
                 f"https://api.clickup.com/api/v2/task/{clickup_custom_id}"
                 f"/field/{field_id}"
             )
             printer.echo(f"Processing PR: '{pr_.number}' / '{pr_.get_title()}' / '{pr_.head_ref}'")
-            printer.echo(f"Requesting {clickup_req}")
+            printer.echo(f"Requesting {url}")
 
-            async with session.post(clickup_req, json=payload, headers=headers, params=query ) as resp:
-                response = await resp.json()
-                printer.echo(pformat(response))
+            # add task to list for later async execution
+            tasks.append(
+                asyncio.ensure_future(
+                    put_clickup_request(session, url, headers, payload, query)
+                )
+            )
+
+            # execute all tasks and get answers
+            put_answers = await asyncio.gather(*tasks)
+            for answers in put_answers:
+                printer.echo(answers)
+
         printer.echo(f"Skipped PRs: {' '.join(skipping_prs)}")
 
 @click.command(
@@ -198,4 +213,10 @@ def milestone_prs_to_clickup_cli(ctx, milestone):
     """
 
     printer.echo("Generating changelog from milestone...")
+
+    # to avoid: `RuntimeError: Event loop is closed` on Windows
+    if platform.platform().startswith("Windows"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
     asyncio.run(milestone_prs_to_clickup(ctx, milestone))
+    print("Done")
