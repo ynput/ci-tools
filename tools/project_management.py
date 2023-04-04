@@ -188,10 +188,10 @@ async def milestone_prs_to_clickup(context, milestone):
                 )
             )
 
-            # execute all tasks and get answers
-            put_answers = await asyncio.gather(*tasks)
-            for answers in put_answers:
-                printer.echo(answers)
+        # execute all tasks and get answers
+        put_answers = await asyncio.gather(*tasks)
+        for answers in put_answers:
+            printer.echo(answers)
 
         print(f"Skipped PRs: {' '.join(skipping_prs)}")
         print("Total skipped PRs: ", len(skipping_prs))
