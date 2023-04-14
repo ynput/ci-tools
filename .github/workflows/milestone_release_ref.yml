@@ -38,6 +38,12 @@ on:
         required: true
       user_name:
         required: true
+      cu_api_key:
+        required: true
+      cu_team_id:
+        required: true
+      cu_field_id:
+        required: true
 
 jobs:
   generate-milestone-changelog:
@@ -65,9 +71,9 @@ jobs:
           echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
-          echo "CLICKUP_API_KEY=${{secret.CLICKUP_API_KEY}}" >> $GITHUB_ENV
-          echo "CLICKUP_RELEASE_FIELD_ID=${{secret.CLICKUP_RELEASE_FIELD_ID}}" >> $GITHUB_ENV
-          echo "CLICKUP_TEAM_ID=${{secret.CLICKUP_TEAM_ID}}" >> $GITHUB_ENV
+          echo "CLICKUP_API_KEY=${{secret.cu_api_key}}" >> $GITHUB_ENV
+          echo "CLICKUP_RELEASE_FIELD_ID=${{secret.cu_field_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_TEAM_ID=${{secret.cu_team_id}}" >> $GITHUB_ENV
 
       #----------------------------------------------
       #      check out to ci tools repo
