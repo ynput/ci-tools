@@ -227,6 +227,7 @@ jobs:
       #----------------------------------------------
       - name: Set Release version to ClickUp tasks
         run: |
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
           python ${{ env.ci-tools-workdir }}/tools/cli.py project prs-to-clickup --milestone=${{ env.NEXT_VERSION }}
         shell: bash
       #----------------------------------------------
