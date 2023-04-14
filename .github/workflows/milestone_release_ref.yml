@@ -71,9 +71,9 @@ jobs:
           echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
           echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
-          echo "CLICKUP_API_KEY=${{secret.cu_api_key}}" >> $GITHUB_ENV
-          echo "CLICKUP_RELEASE_FIELD_ID=${{secret.cu_field_id}}" >> $GITHUB_ENV
-          echo "CLICKUP_TEAM_ID=${{secret.cu_team_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_API_KEY=${{secrets.cu_api_key}}" >> $GITHUB_ENV
+          echo "CLICKUP_RELEASE_FIELD_ID=${{secrets.cu_field_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_TEAM_ID=${{secrets.cu_team_id}}" >> $GITHUB_ENV
 
       #----------------------------------------------
       #      check out to ci tools repo
