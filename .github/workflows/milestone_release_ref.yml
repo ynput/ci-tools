@@ -235,7 +235,7 @@ jobs:
       #----------------------------------------------
       - name: Test print the change log result
         run: |
-          echo "changelog: ${{ steps.changelog.outputs.string }}"
+          # echo "changelog: ${{ steps.changelog.outputs.string }}"
           echo "current_version: ${{ env.CURRENT_VERSION }}"
           echo "next_version: ${{ env.NEXT_VERSION }}"
           echo "milestoneCommit: ${{ steps.milestoneCommit.outputs.commit }}"
