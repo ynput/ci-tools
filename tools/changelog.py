@@ -252,9 +252,9 @@ class PullRequestDescription:
             elif type_ == "block_code":
                 info = input.get("info")
                 if info:
-                    text = f"\n```{info}\n" + text + "```"
+                    text = f"\n```{info}\n" + text + "```\n"
                 else:
-                    text = f"\n```\n" + text + "```"
+                    text = f"\n```\n" + text + "```\n"
             # condition for text with line endings
             if "\n" in text and type_ != "block_code":
                 return_list.extend(text.split("\n"))
