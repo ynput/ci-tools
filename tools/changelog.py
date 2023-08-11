@@ -134,9 +134,13 @@ class PullRequestDescription:
         markdown = mistune.create_markdown(renderer="ast")
         markdown_obj = markdown(self.body)
 
+        # check if any of the headers are available
         test_available_headers = [
             el_ for el_ in markdown_obj
-            if el_["type"] == "heading" and el_["children"][0]["text"] in headers
+            if (
+                el_["type"] == "heading"
+                and el_["children"][0]["text"] in headers
+            )
         ]
         if not test_available_headers:
             return self.body
@@ -144,12 +148,19 @@ class PullRequestDescription:
         # first get all defined headers and its paragraphs
         actual_header = None
         for el_ in markdown_obj:
+            # if header is defined, add to dict
             if (
                 el_["type"] == "heading"
                 and el_["children"][0]["text"] in headers
             ):
                 actual_header = el_["children"][0]["text"]
                 processing_headers[actual_header] = []
+
+            # if header is not defined, skip
+            if not actual_header:
+                continue
+
+            # if header is not defined, skip
             if (
                 el_["type"] == "heading"
                 and el_["children"][0]["text"] not in headers
