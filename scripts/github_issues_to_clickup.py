@@ -15,6 +15,12 @@ repository
 - create_clickup_tasks: creates ClickUp tasks from a list of issues
 """
 
+"""
+TODO:
+- [ ] only extract relevant text from markdown issue body into clickup task
+- [ ] resync all issues body to clickup tasks as markdown
+- [ ] sync all issue domaine labels to clickup task's custom attributes
+"""
 
 import os
 import re
@@ -290,7 +296,7 @@ async def _make_clickup_task(
 
     payload = {
         "name": issue_title,
-        "description": issue_body,
+        "markdown_description": issue_body,
         "custom_fields": [
             {
                 "id": "4f79c492-b1f2-4737-b7fa-6e60c9a67f57",
@@ -360,11 +366,17 @@ async def _update_cuid_url_to_issue(session, issue, task_data, cu_id_tag=None):
         f"[cuID:[{task_data['custom_id']}]({task_data['url']})]"
 
     if cu_id_tag:
-        print(f"Updating Issue: {issue['number']} with '{task_cu_id_url_markdown}'")
+        print(
+            f"Updating Issue: {issue['number']} "
+            f"with '{task_cu_id_url_markdown}'"
+        )
         issue_body = issue["body"].replace(
             cu_id_tag, task_cu_id_url_markdown)
     else:
-        print(f"Adding CU url: {issue['number']} with '{task_cu_id_url_markdown}'")
+        print(
+            f"Adding CU url: {issue['number']} "
+            f"with '{task_cu_id_url_markdown}'"
+        )
         issue_body = (
             issue["body"]
             + f"\n\n{task_cu_id_url_markdown}"
@@ -433,11 +445,9 @@ def _get_clickup_task_data_by_cu_id(cu_tasks, cu_id_custom=None, cu_id=None):
     task_data = None
     for _, cu_task_data in cu_tasks.items():
         if cu_task_data["id"] == cu_id:
-            # print(f"Found 'cuID' task in clickup: {cu_task_data['name']}")
             task_data = cu_task_data
             break
         if cu_task_data["custom_id"] == cu_id_custom:
-            # print(f"Found 'custom_id' task in clickup: {cu_task_data['name']}")
             task_data = cu_task_data
             break
 
@@ -461,7 +471,8 @@ async def sync_issues_to_clickup(
 
         async_tasks = []
         # get all issues from github
-        issues = _get_issues_from_repository(from_issue_number, to_issue_number)
+        issues = _get_issues_from_repository(
+            from_issue_number, to_issue_number)
         # iterate through all issues
         for issue in issues:
             # get cuID from issue body
@@ -562,7 +573,7 @@ if platform.platform().startswith("Windows"):
 
 asyncio.run(
     sync_issues_to_clickup(
-        from_issue_number=2000, to_issue_number=4000, remove_temp_files=False
+        from_issue_number=5579, to_issue_number=5579, remove_temp_files=True
     )
 )
 
