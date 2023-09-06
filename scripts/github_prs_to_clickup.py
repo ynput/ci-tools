@@ -2,7 +2,6 @@ import os
 import re
 import json
 import platform
-from pprint import pprint
 from dotenv import load_dotenv
 import requests
 import asyncio
@@ -18,12 +17,15 @@ headers = {
     "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}"
 }
 
-json_file_path = "temp_file.json"
+json_file_path = "temp_file_prs.json"
+
 
 def get_pulls_from_repository(from_pr_number, to_pr_number):
     """Get a list of pull requests from the repository."""
     def return_range(prs):
-        return [pr for pr in prs if from_pr_number <= pr["number"] <= to_pr_number]
+        return [
+            pr for pr in prs if from_pr_number <= pr["number"] <= to_pr_number
+        ]
 
     global repo_owner, repo_name, json_file_path
 
@@ -59,7 +61,7 @@ def get_pulls_from_repository(from_pr_number, to_pr_number):
                 }
             }
         }
-    """
+    """  # noqa: E501
 
     # Set the necessary parameters
     access_token = os.getenv("GITHUB_TOKEN")
@@ -75,7 +77,8 @@ def get_pulls_from_repository(from_pr_number, to_pr_number):
 
     _pull_requests = []
 
-    # Loop through the pages of pull requests until we hit the end or the last pull request we want
+    # Loop through the pages of pull requests until we hit the end or the last
+    # pull request we want
     has_next_page = True
     end_cursor = None
     while has_next_page:
@@ -95,7 +98,10 @@ def get_pulls_from_repository(from_pr_number, to_pr_number):
         data = json.loads(response.text)
 
         # Retrieve the pull requests from the response data
-        pull_requests_page = [edge['node'] for edge in data['data']['repository']['pullRequests']['edges']]
+        pull_requests_page = [
+            edge['node']
+            for edge in data['data']['repository']['pullRequests']['edges']
+        ]
 
         # Add the pull requests to the list of pull requests we're collecting
         _pull_requests += pull_requests_page
@@ -113,20 +119,29 @@ def get_pulls_from_repository(from_pr_number, to_pr_number):
     # Return the list of pull requests which match the given range
     return return_range(_pull_requests)
 
+
 async def get_request_to_session(session, url):
     global headers
-    async with session.get(url, headers=headers ) as resp:
+    async with session.get(url, headers=headers) as resp:
         return await resp.json()
+
 
 async def put_clickup_request(session, url, payload, query):
     headers_ = {
         "Content-Type": "application/json",
         "Authorization": os.getenv("CLICKUP_API_KEY")
     }
-    async with session.post(url, json=payload, headers=headers_, params=query ) as resp:
-            return await resp.json()
+    async with session.post(
+        url,
+        json=payload,
+        headers=headers_,
+        params=query
+    ) as resp:
+        return await resp.json()
 
-async def set_release_names_to_clickup(session, pull, release_version, skipping_prs):
+
+async def set_release_names_to_clickup(
+        session, pull, release_version, skipping_prs):
 
     pr_number = pull["number"]
     pr_title = pull["title"]
@@ -164,7 +179,11 @@ async def set_release_names_to_clickup(session, pull, release_version, skipping_
         print(f"Error: {response['error']}")
         return
 
-    return f"Processing PR: '{pr_number}' / '{pr_title}' / '{pr_head_ref}' CU Task: '{clickup_custom_id}'"
+    return (
+        f"Processing PR: '{pr_number}' / '{pr_title}' / '{pr_head_ref}' "
+        f"CU Task: '{clickup_custom_id}'"
+    )
+
 
 async def get_release(pull, session):
     global repo_owner, repo_name
@@ -172,7 +191,10 @@ async def get_release(pull, session):
     pr_number = pull["number"]
 
     # Get pull request details
-    pr_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/pulls/{pr_number}"
+    pr_url = (
+        f"https://api.github.com/repos/{repo_owner}/"
+        f"{repo_name}/pulls/{pr_number}"
+    )
     pr_response = await get_request_to_session(session, pr_url)
 
     # Get all the merged commits related to the pull request
@@ -183,25 +205,35 @@ async def get_release(pull, session):
     merge_commit_url = pr_response["merge_commit_sha"]
 
     # Get the details of the merge commit
-    commit_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/commits/{merge_commit_url}"
+    commit_url = (
+        f"https://api.github.com/repos/{repo_owner}/{repo_name}"
+        f"/commits/{merge_commit_url}"
+    )
     commit_response = await get_request_to_session(session, commit_url)
 
-
     # Get the timestamp of the merge commit as a datetime object
-    merge_commit_timestamp = datetime.strptime(commit_response["commit"]["committer"]["date"], '%Y-%m-%dT%H:%M:%SZ')
+    merge_commit_timestamp = datetime.strptime(
+        commit_response["commit"]["committer"]["date"],
+        '%Y-%m-%dT%H:%M:%SZ'
+    )
 
     # Get all the tags associated with the repository
-    release_url = f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases"
+    release_url = (
+        f"https://api.github.com/repos/{repo_owner}/{repo_name}/releases"
+    )
     release_response = await get_request_to_session(session, release_url)
 
     # Filter out pre-releases and tags before the merge commit timestamp
     release_names = [
         release["name"] for release in release_response
         if not release["prerelease"]
-        if datetime.strptime(release["published_at"],'%Y-%m-%dT%H:%M:%SZ') >= merge_commit_timestamp
+        if datetime.strptime(
+            release["published_at"],
+            '%Y-%m-%dT%H:%M:%SZ'
+        ) >= merge_commit_timestamp
     ]
-
     return release_names[-1]
+
 
 async def get_release_from_prs(from_pr_number, to_pr_number):
 
@@ -217,7 +249,8 @@ async def get_release_from_prs(from_pr_number, to_pr_number):
             # add task to list for later async execution
             tasks.append(
                 asyncio.ensure_future(
-                    set_release_names_to_clickup(session, pull, release_version, skipping_prs)
+                    set_release_names_to_clickup(
+                        session, pull, release_version, skipping_prs)
                 )
             )
 
@@ -233,5 +266,5 @@ async def get_release_from_prs(from_pr_number, to_pr_number):
 if platform.platform().startswith("Windows"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-asyncio.run(get_release_from_prs(from_pr_number=2000, to_pr_number=3200))
+asyncio.run(get_release_from_prs(from_pr_number=1500, to_pr_number=1800))
 print("Done")
