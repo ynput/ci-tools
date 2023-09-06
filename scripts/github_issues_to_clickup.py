@@ -1,7 +1,22 @@
+"""This module provides functionality to transfer issues from a GitHub
+repository to a ClickUp task list.
 
-from asyncio import tasks
+The module uses the GitHub API to retrieve issues from a specified repository
+and the ClickUp API to create tasks in a specified task list.
+
+The module requires the following environment variables to be set:
+- GITHUB_TOKEN: a personal access token for the GitHub API
+- CLICKUP_LIST_ID: the ID of the ClickUp task list to create tasks in
+- CLICKUP_TEAM_ID: the ID of the ClickUp team to create tasks in
+
+The module defines the following functions:
+- _get_issues_from_repository: retrieves a list of issues from a GitHub
+repository
+- create_clickup_tasks: creates ClickUp tasks from a list of issues
+"""
+
+
 import os
-import pprint
 import re
 import json
 import platform
@@ -27,9 +42,7 @@ class CTX:
     team_id = os.getenv("CLICKUP_TEAM_ID")
 
 
-
-
-def get_issues_from_repository(from_issue_number, to_issue_number):
+def _get_issues_from_repository(from_issue_number, to_issue_number):
     """Get a list of Issues requests from the repository."""
 
     def return_range(issues):
@@ -125,13 +138,7 @@ def get_issues_from_repository(from_issue_number, to_issue_number):
     return return_range(_issues)
 
 
-async def get_request_to_session(session, url):
-
-    async with session.get(url, headers=CTX.headers) as resp:
-        return await resp.json()
-
-
-async def put_clickup_request(session, url, payload, query):
+async def _put_clickup_request(session, url, payload, query):
     headers_ = {
         "Content-Type": "application/json",
         "Authorization": os.getenv("CLICKUP_API_KEY")
@@ -145,7 +152,7 @@ async def put_clickup_request(session, url, payload, query):
         return await resp.json()
 
 
-async def get_clickup_request(session, url, query):
+async def _get_clickup_request(session, url, query):
     headers_ = {
         "Content-Type": "application/json",
         "Authorization": os.getenv("CLICKUP_API_KEY")
@@ -158,7 +165,7 @@ async def get_clickup_request(session, url, query):
         return await resp.json()
 
 
-async def get_clickup_task(
+async def _get_clickup_task(
         session, cu_id_hash):
 
     query = {
@@ -172,7 +179,7 @@ async def get_clickup_task(
 
     print(url)
 
-    response = await get_clickup_request(session, url, query)
+    response = await _get_clickup_request(session, url, query)
 
     if "error" in response:
         print(f"Error: {response['error']}")
@@ -191,7 +198,7 @@ async def get_clickup_task(
     return response
 
 
-async def get_all_clickup_tasks(
+async def _get_all_clickup_tasks(
         session):
 
     if os.path.exists(JSON_TASKS_FILE_PATH):
@@ -209,7 +216,7 @@ async def get_all_clickup_tasks(
     url = (
         f"https://api.clickup.com/api/v2/list/{CTX.list_id}/task")
 
-    response = await get_clickup_request(session, url, query)
+    response = await _get_clickup_request(session, url, query)
 
     if "error" in response:
         print(f"Error: {response['error']}")
@@ -228,7 +235,7 @@ async def get_all_clickup_tasks(
         # Increment the page number for the next request
         query["page"] = str(int(query["page"]) + 1)
 
-        response = await get_clickup_request(session, url, query)
+        response = await _get_clickup_request(session, url, query)
 
         if "error" in response:
             print(f"Error: {response['error']}")
@@ -244,30 +251,30 @@ async def get_all_clickup_tasks(
     return tasks_all
 
 
-def get_cu_id_tag(body_text):
+def _get_clickup_cuid_tag(body_text):
     """Get the latest release tag name from the body."""
     found = re.findall(r"\[cuID:.*\]", body_text)
     return found.pop() if found else None
 
 
-def get_cu_id_url(cu_id_tag):
+def _get_clickup_url_id(cu_id_tag):
     """Get url from cuID tag."""
     found = re.findall(r"(https://app\.clickup\.com/t/.*)\)\]", cu_id_tag)
     return found.pop() if found else None
 
 
-def get_cu_id_op(cu_id_tag):
+def _get_clickup_custom_id(cu_id_tag):
     """Get OP- patter from cuID tag."""
     found = re.findall(r"OP-\d{4}", cu_id_tag)
     return found.pop() if found else None
 
 
-def get_cu_id_hash(cu_id_tag):
+def _get_clickup_id_hash(cu_id_tag):
     found = re.findall(r"cuID:(.*)\]", cu_id_tag)
     return found.pop() if found else None
 
 
-async def make_clickup_task(
+async def _make_clickup_task(
         session, issue):
 
     issue_number = issue["number"]
@@ -301,7 +308,7 @@ async def make_clickup_task(
 
     print(url)
 
-    response = await put_clickup_request(session, url, payload, query)
+    response = await _put_clickup_request(session, url, payload, query)
 
     if "error" in response:
         print(f"Error: {response['error']}")
@@ -313,7 +320,7 @@ async def make_clickup_task(
     return response
 
 
-async def create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
+async def _create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
     """Create a task in Clickup."""
 
     issue_number = issue["number"]
@@ -326,7 +333,7 @@ async def create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
         cu_task_data = cu_tasks[issue_title]
     else:
         print(f"Creating task '{issue_number}:{issue_title}' in Clickup")
-        cu_task_data = await make_clickup_task(
+        cu_task_data = await _make_clickup_task(
             session, issue)
 
         task_id_hash = cu_task_data["id"]
@@ -337,17 +344,17 @@ async def create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
         # and try again
         while True:
             await asyncio.sleep(5)
-            cu_task_data = await get_clickup_task(
+            cu_task_data = await _get_clickup_task(
                 session, task_id_hash)
             custom_task_id = cu_task_data["custom_id"]
 
             if custom_task_id:
                 break
 
-    await update_cuid_url_to_issue(session, issue, cu_task_data, cu_id_tag)
+    await _update_cuid_url_to_issue(session, issue, cu_task_data, cu_id_tag)
 
 
-async def update_cuid_url_to_issue(session, issue, task_data, cu_id_tag=None):
+async def _update_cuid_url_to_issue(session, issue, task_data, cu_id_tag=None):
     # update issue body with cuID
     task_cu_id_url_markdown = \
         f"[cuID:[{task_data['custom_id']}]({task_data['url']})]"
@@ -376,7 +383,7 @@ async def update_cuid_url_to_issue(session, issue, task_data, cu_id_tag=None):
     await session.patch(url, json=payload, headers=CTX.headers)
 
 
-async def close_github_issue(session, issue):
+async def _close_github_issue(session, issue):
     """Close issue in Github."""
     print(f"Closing Issue: {issue['number']}")
     url = (
@@ -391,17 +398,48 @@ async def close_github_issue(session, issue):
     await session.patch(url, json=payload, headers=CTX.headers)
 
 
-async def get_clickup_task_data(
-        session, issue, cu_tasks, cu_id_custom=None, cu_id=None
+async def _get_clickup_task_data(
+        session, cu_tasks, cu_id_custom=None, cu_id=None
 ):
-    task_data = get_clickup_task_data_by_cu_id(
-        issue, cu_tasks, cu_id_custom, cu_id)
+    task_data = _get_clickup_task_data_by_cu_id(
+        cu_tasks, cu_id_custom, cu_id)
     if not task_data:
         # task was moved to another list
         # get the task data from clickup
         print(f"Task was moved to another list: {cu_id}")
-        task_data = await get_clickup_task(
+        task_data = await _get_clickup_task(
             session, cu_id)
+
+    return task_data
+
+
+def _get_clickup_task_data_by_cu_id(cu_tasks, cu_id_custom=None, cu_id=None):
+    """This function searches through a dictionary of ClickUp tasks
+
+    Returns the task data for a specific task that matches either
+    a custom ID or a ClickUp ID.
+
+    Args:
+        cu_tasks (dict): A dictionary of ClickUp tasks.
+        cu_id_custom (str, optional): The custom ID of the task to search for.
+            Defaults to None.
+        cu_id (str, optional): The ClickUp ID of the task to search for.
+            Defaults to None.
+
+    Returns:
+        dict: The task data for the matching task,
+            or None if no match is found.
+    """
+    task_data = None
+    for _, cu_task_data in cu_tasks.items():
+        if cu_task_data["id"] == cu_id:
+            # print(f"Found 'cuID' task in clickup: {cu_task_data['name']}")
+            task_data = cu_task_data
+            break
+        if cu_task_data["custom_id"] == cu_id_custom:
+            # print(f"Found 'custom_id' task in clickup: {cu_task_data['name']}")
+            task_data = cu_task_data
+            break
 
     return task_data
 
@@ -418,29 +456,29 @@ async def sync_issues_to_clickup(
 
     async with aiohttp.ClientSession() as session:
         # check if the issue title is not already created in clickup tasks
-        cu_tasks = await get_all_clickup_tasks(session)
+        cu_tasks = await _get_all_clickup_tasks(session)
         print(f"ClickUp tasks amount: {len(cu_tasks)}")
 
         async_tasks = []
         # get all issues from github
-        issues = get_issues_from_repository(from_issue_number, to_issue_number)
+        issues = _get_issues_from_repository(from_issue_number, to_issue_number)
         # iterate through all issues
         for issue in issues:
             # get cuID from issue body
-            cu_id_tag = get_cu_id_tag(issue["body"])
+            cu_id_tag = _get_clickup_cuid_tag(issue["body"])
             print(f"Processing Issue: {issue['number']} with {cu_id_tag}")
 
             if cu_id_tag:
                 # check if url https://app.clickup.com exists
-                url_in_tag = get_cu_id_url(cu_id_tag)
+                url_in_tag = _get_clickup_url_id(cu_id_tag)
 
                 if url_in_tag:
                     # skip this issue since it is done
-                    cu_id_custom = get_cu_id_op(cu_id_tag)
+                    cu_id_custom = _get_clickup_custom_id(cu_id_tag)
                     cu_id = url_in_tag.split("/")[-1]
 
-                    task_data = await get_clickup_task_data(
-                        session, issue, cu_tasks, cu_id_custom, cu_id)
+                    task_data = await _get_clickup_task_data(
+                        session, cu_tasks, cu_id_custom, cu_id)
 
                     if (
                         task_data
@@ -451,16 +489,16 @@ async def sync_issues_to_clickup(
                     ):
                         async_tasks.append(
                             asyncio.ensure_future(
-                                close_github_issue(session, issue)
+                                _close_github_issue(session, issue)
                             )
                         )
                     continue
 
                 # check if cuID is in regex pattern `/OP-.+/g`
-                cu_id_custom = get_cu_id_op(cu_id_tag)
+                cu_id_custom = _get_clickup_custom_id(cu_id_tag)
                 print(f"cuID Custom: {cu_id_custom}")
 
-                cu_id = get_cu_id_hash(cu_id_tag)
+                cu_id = _get_clickup_id_hash(cu_id_tag)
                 print(f"cuID: {cu_id}")
 
                 # in case tag existing but it is not filled anyway
@@ -470,7 +508,7 @@ async def sync_issues_to_clickup(
                     # add task to list for later async execution
                     async_tasks.append(
                         asyncio.ensure_future(
-                            create_task_in_clickup(
+                            _create_task_in_clickup(
                                 session, issue, cu_tasks, cu_id_tag)
                         )
                     )
@@ -478,8 +516,8 @@ async def sync_issues_to_clickup(
 
                 print(f"Updating task in Clickup: {cu_id_tag}")
 
-                task_data = await get_clickup_task_data(
-                        session, issue, cu_tasks, cu_id_custom, cu_id)
+                task_data = await _get_clickup_task_data(
+                        session, cu_tasks, cu_id_custom, cu_id)
 
                 if (
                     task_data
@@ -490,13 +528,13 @@ async def sync_issues_to_clickup(
                 ):
                     async_tasks.append(
                             asyncio.ensure_future(
-                                close_github_issue(session, issue)
+                                _close_github_issue(session, issue)
                             )
                         )
                 elif task_data:
                     async_tasks.append(
                         asyncio.ensure_future(
-                            update_cuid_url_to_issue(
+                            _update_cuid_url_to_issue(
                                 session, issue, task_data, cu_id_tag)
                         )
                     )
@@ -506,7 +544,7 @@ async def sync_issues_to_clickup(
                 # add task to list for later async execution
                 async_tasks.append(
                     asyncio.ensure_future(
-                        create_task_in_clickup(
+                        _create_task_in_clickup(
                             session, issue, cu_tasks)
                     )
                 )
@@ -516,25 +554,6 @@ async def sync_issues_to_clickup(
 
         for response in responses:
             print(response)
-
-
-def get_clickup_task_data_by_cu_id(issue, cu_tasks, cu_id_custom=None, cu_id=None):
-    task_data = None
-    # for cu_task_name, cu_task_data in cu_tasks.items():
-    #     if cu_task_name == issue["title"]:
-    #         print(f">> Check duplicity: {cu_task_name}: {cu_task_data['id']}")
-
-    for cu_task_name, cu_task_data in cu_tasks.items():
-        if cu_task_data["id"] == cu_id:
-            # print(f"Found 'cuID' task in clickup: {cu_task_data['name']}")
-            task_data = cu_task_data
-            break
-        if cu_task_data["custom_id"] == cu_id_custom:
-            # print(f"Found 'custom_id' task in clickup: {cu_task_data['name']}")
-            task_data = cu_task_data
-            break
-
-    return task_data
 
 
 # to avoid: `RuntimeError: Event loop is closed` on Windows
