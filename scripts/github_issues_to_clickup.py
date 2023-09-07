@@ -17,6 +17,7 @@ repository
 
 """
 TODO:
+- [ ] add support for resolving of PYPE-XXXX issues
 - [ ] only extract relevant text from markdown issue body into clickup task
 - [ ] resync all issues body to clickup tasks as markdown
 - [ ] sync all issue domaine labels to clickup task's custom attributes
@@ -46,6 +47,7 @@ class CTX:
     }
     list_id = os.getenv("CLICKUP_LIST_ID")
     team_id = os.getenv("CLICKUP_TEAM_ID")
+    folder_id = os.getenv("CLICKUP_FOLDER_ID")
 
 
 def _get_issues_from_repository(from_issue_number, to_issue_number):
@@ -211,44 +213,51 @@ async def _get_all_clickup_tasks(
         with open(JSON_TASKS_FILE_PATH, 'r') as file:
             return json.load(file)
 
+    # get all lists ids from folder id
+    lists_ids = await _get_clickup_folder_list_ids(session, CTX.folder_id)
+    print(f"ClickUp lists: {lists_ids}")
+
     tasks_all = {}
-    query = {
-        "archived": "false",
-        "subtasks": "true",
-        "include_closed": "true",
-        "page": "0",
-    }
+    for list_id, list_name in lists_ids.items():
+        print(f"Processing List: {list_name}")
 
-    url = (
-        f"https://api.clickup.com/api/v2/list/{CTX.list_id}/task")
+        query = {
+            "archived": "false",
+            "subtasks": "true",
+            "include_closed": "true",
+            "page": "0",
+        }
 
-    response = await _get_clickup_request(session, url, query)
-
-    if "error" in response:
-        print(f"Error: {response['error']}")
-        return
-    elif "err" in response:
-        print(f"Error: {response['err']}")
-        return
-
-    while response["tasks"]:
-        print(f"Page: {query['page']}")
-        # Process the current page results
-        tasks_page = {task["name"]: task for task in response["tasks"]}
-        print(f"Collected Tasks {len(tasks_page)}")
-        tasks_all.update(tasks_page)
-
-        # Increment the page number for the next request
-        query["page"] = str(int(query["page"]) + 1)
+        url = (
+            f"https://api.clickup.com/api/v2/list/{list_id}/task")
 
         response = await _get_clickup_request(session, url, query)
 
         if "error" in response:
             print(f"Error: {response['error']}")
-            break
+            return
         elif "err" in response:
             print(f"Error: {response['err']}")
-            break
+            return
+
+        while response["tasks"]:
+            print(f"Page: {query['page']}")
+            # Process the current page results
+            tasks_page = {task["name"]: task for task in response["tasks"]}
+            print(f"Collected Tasks {len(tasks_page)}")
+            tasks_all.update(tasks_page)
+
+            # Increment the page number for the next request
+            query["page"] = str(int(query["page"]) + 1)
+
+            response = await _get_clickup_request(session, url, query)
+
+            if "error" in response:
+                print(f"Error: {response['error']}")
+                break
+            elif "err" in response:
+                print(f"Error: {response['err']}")
+                break
 
     # Save text to temporary file
     with open(JSON_TASKS_FILE_PATH, 'w') as file:
@@ -292,7 +301,6 @@ async def _make_clickup_task(
         "custom_task_ids": "true",
         "team_id": CTX.team_id
     }
-    print(query)
 
     payload = {
         "name": issue_title,
@@ -311,8 +319,6 @@ async def _make_clickup_task(
 
     url = (
         f"https://api.clickup.com/api/v2/list/{CTX.list_id}/task")
-
-    print(url)
 
     response = await _put_clickup_request(session, url, payload, query)
 
@@ -381,6 +387,9 @@ async def _update_cuid_url_to_issue(session, issue, task_data, cu_id_tag=None):
             issue["body"]
             + f"\n\n{task_cu_id_url_markdown}"
         )
+
+    # update issue in issues data with new body
+    issue["body"] = issue_body
 
     # update github issue with new body
     url = (
@@ -454,6 +463,22 @@ def _get_clickup_task_data_by_cu_id(cu_tasks, cu_id_custom=None, cu_id=None):
     return task_data
 
 
+async def _get_clickup_folder_list_ids(session, folder_id):
+    """Get all lists ids from clickup folder."""
+    url = (
+        f"https://api.clickup.com/api/v2/folder/{folder_id}/list")
+
+    response = await _get_clickup_request(session, url, {"archived": "false"})
+
+    if "error" in response:
+        print(f"Error: {response['error']}")
+        return
+    elif "err" in response:
+        print(f"Error: {response['err']}")
+        return
+    return {list_["id"]: list_["name"] for list_ in response["lists"]}
+
+
 async def sync_issues_to_clickup(
         from_issue_number, to_issue_number, remove_temp_files=True):
     """Sync issues from Github to Clickup."""
@@ -485,24 +510,6 @@ async def sync_issues_to_clickup(
 
                 if url_in_tag:
                     # skip this issue since it is done
-                    cu_id_custom = _get_clickup_custom_id(cu_id_tag)
-                    cu_id = url_in_tag.split("/")[-1]
-
-                    task_data = await _get_clickup_task_data(
-                        session, cu_tasks, cu_id_custom, cu_id)
-
-                    if (
-                        task_data
-                        and task_data['status']['status'] in [
-                            'Closed',
-                            'Deleted',
-                        ]
-                    ):
-                        async_tasks.append(
-                            asyncio.ensure_future(
-                                _close_github_issue(session, issue)
-                            )
-                        )
                     continue
 
                 # check if cuID is in regex pattern `/OP-.+/g`
@@ -560,6 +567,37 @@ async def sync_issues_to_clickup(
                     )
                 )
 
+        for issue in issues:
+            # get cuID from issue body
+            cu_id_tag = _get_clickup_cuid_tag(issue["body"])
+            print(f"Syncing Issue status: {issue['number']} with {cu_id_tag}")
+
+            if cu_id_tag:
+                # check if url https://app.clickup.com exists
+                url_in_tag = _get_clickup_url_id(cu_id_tag)
+
+                if url_in_tag:
+                    # skip this issue since it is done
+                    cu_id_custom = _get_clickup_custom_id(cu_id_tag)
+                    cu_id = url_in_tag.split("/")[-1]
+
+                    task_data = await _get_clickup_task_data(
+                        session, cu_tasks, cu_id_custom, cu_id)
+
+                    if (
+                        task_data
+                        and task_data['status']['status'] in [
+                            'Closed',
+                            'Deleted',
+                        ]
+                    ):
+                        async_tasks.append(
+                            asyncio.ensure_future(
+                                _close_github_issue(session, issue)
+                            )
+                        )
+                    continue
+
         # execute all tasks and get answers
         responses = await asyncio.gather(*async_tasks)
 
@@ -573,7 +611,7 @@ if platform.platform().startswith("Windows"):
 
 asyncio.run(
     sync_issues_to_clickup(
-        from_issue_number=5579, to_issue_number=5579, remove_temp_files=True
+        from_issue_number=5579, to_issue_number=5700, remove_temp_files=False
     )
 )
 
