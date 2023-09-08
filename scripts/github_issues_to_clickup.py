@@ -26,10 +26,11 @@ TODO:
 """
 
 import os
-from pprint import pprint
+import click
 import re
 import json
 import platform
+from pprint import pformat
 from dotenv import load_dotenv
 import requests
 import asyncio
@@ -62,21 +63,30 @@ class CTX:
         }
     }
     request_sleep_time = 60
+    clickup_tasks = None
 
 
-def _get_issues_from_repository(from_issue_number, to_issue_number):
+def _get_issues_from_repository(from_issue_number=None, to_issue_number=None):
     """Get a list of Issues requests from the repository."""
 
-    def return_range(issues):
-        return [
-            iss for iss in issues
-            if from_issue_number <= iss["number"] <= to_issue_number
-        ]
+    def return_range(issues, from_issue_number=None, to_issue_number=None):
+        if any([from_issue_number, to_issue_number]):
+            from_issue_number = from_issue_number or 0
+            to_issue_number = to_issue_number or 1000000
+
+            print(f"Filtering issues from {from_issue_number} to {to_issue_number}")
+            return {
+                issue_number: issue for issue_number, issue in issues.items()
+                if from_issue_number <= int(issue_number) <= to_issue_number
+            }
+
+        return issues
 
     if os.path.exists(JSON_ISSUES_FILE_PATH):
         with open(JSON_ISSUES_FILE_PATH, 'r') as file:
-            prs_ = json.load(file)
-            return return_range(prs_)
+            issues = json.load(file)
+        return return_range(
+            issues, from_issue_number, to_issue_number)
 
     # Define the GraphQL query
     query = """
@@ -145,13 +155,13 @@ def _get_issues_from_repository(from_issue_number, to_issue_number):
         returned_data = json.loads(response.text)
 
         # Retrieve the pull requests from the response data
-        pull_requests_page = [
+        issue_requests_page = [
             edge['node']
             for edge in returned_data['data']['repository']['issues']['edges']
         ]
 
         # Add the pull requests to the list of pull requests we're collecting
-        _issues += pull_requests_page
+        _issues += issue_requests_page
 
         # Check if there are more pages of pull requests to retrieve
         page_info = returned_data['data']['repository']['issues']['pageInfo']
@@ -159,12 +169,34 @@ def _get_issues_from_repository(from_issue_number, to_issue_number):
         end_cursor = page_info['endCursor']
         print(f"Collected Issues {len(_issues)}")
 
-    # Dump json data into file
-    with open(JSON_ISSUES_FILE_PATH, 'w') as file:
-        json.dump(_issues, file, indent=4)
+    # convert list of issues to dictionary where key is issue number
+    issues = {issue["number"]: issue for issue in _issues}
+
+    # updating json cache file
+    _update_github_issues_json_file(issues)
 
     # Return the list of pull requests which match the given range
-    return return_range(_issues)
+    return return_range(issues, from_issue_number, to_issue_number)
+
+
+def _update_github_issues_json_file(issues, update=False):
+    print(f"Github issues amount: {len(issues)}")
+
+    if update:
+        # Load json data from file
+        with open(JSON_ISSUES_FILE_PATH, 'r') as file:
+            issues_data = json.load(file)
+
+        # Update json data
+        issues_data.update(issues)
+
+        # Save text to temporary file
+        with open(JSON_ISSUES_FILE_PATH, 'w') as file:
+            json.dump(issues_data, file, indent=4)
+    else:
+        # Dump json data into file
+        with open(JSON_ISSUES_FILE_PATH, 'w') as file:
+            json.dump(issues, file, indent=4)
 
 
 async def _post_clickup_request(session, url, payload, query):
@@ -178,7 +210,6 @@ async def _post_clickup_request(session, url, payload, query):
         headers=headers_,
         params=query
     ) as resp:
-        print(f"CU Post Status: {resp.status}")
         if resp.status == 429:
             print(
                 "Rate limit reached, waiting "
@@ -201,7 +232,6 @@ async def _put_clickup_request(session, url, payload, query):
         headers=headers_,
         params=query
     ) as resp:
-        print(f"CU Put Status: {resp.status}")
         if resp.status == 429:
             print(
                 "Rate limit reached, waiting "
@@ -224,7 +254,6 @@ async def _get_clickup_request(session, url, query):
         headers=headers_,
         params=query
     ) as resp:
-        print(f"CU Get Status: {resp.status}")
         if resp.status == 429:
             print(
                 "Rate limit reached, waiting "
@@ -322,11 +351,16 @@ async def _get_all_clickup_tasks(
                 print(f"Error: {response['err']}")
                 break
 
-    # Save text to temporary file
-    with open(JSON_TASKS_FILE_PATH, 'w') as file:
-        json.dump(tasks_all, file, indent=4)
+    _update_clickup_tasks_json_file(tasks_all)
 
     return tasks_all
+
+
+def _update_clickup_tasks_json_file(tasks):
+    print(f"ClickUp tasks amount: {len(tasks)}")
+    # Save text to temporary file
+    with open(JSON_TASKS_FILE_PATH, 'w') as file:
+        json.dump(tasks, file, indent=4)
 
 
 def _get_clickup_cuid_tag(body_text):
@@ -424,17 +458,17 @@ async def _update_clickup_task(
     return response
 
 
-async def _create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
+async def _create_task_in_clickup(session, issue, cu_id_tag=None):
     """Create a task in Clickup."""
 
     issue_number = issue["number"]
     issue_title = issue["title"]
 
-    if issue_title in cu_tasks:
+    if issue_title in CTX.clickup_tasks:
         print(f"Task '{issue_number}:{issue_title}' already exists in Clickup")
-        task_id_hash = cu_tasks[issue_title]["id"]
-        custom_task_id = cu_tasks[issue_title]["custom_id"]
-        cu_task_data = cu_tasks[issue_title]
+        task_id_hash = CTX.clickup_tasks[issue_title]["id"]
+        custom_task_id = CTX.clickup_tasks[issue_title]["custom_id"]
+        cu_task_data = CTX.clickup_tasks[issue_title]
     else:
         print(f"Creating task '{issue_number}:{issue_title}' in Clickup")
         cu_task_data = await _make_clickup_task(
@@ -442,6 +476,8 @@ async def _create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
 
         task_id_hash = cu_task_data["id"]
         custom_task_id = cu_task_data["custom_id"]
+        # update cashed clickup tasks
+        CTX.clickup_tasks[issue_title] = cu_task_data
 
     if not custom_task_id:
         # check if custom_id key in created_task_data if not wait for 5 seconds
@@ -453,6 +489,8 @@ async def _create_task_in_clickup(session, issue, cu_tasks, cu_id_tag=None):
             custom_task_id = cu_task_data["custom_id"]
 
             if custom_task_id:
+                # update cashed clickup tasks
+                CTX.clickup_tasks[issue_title] = cu_task_data
                 break
 
     await _update_cuid_url_to_issue(session, issue, cu_task_data, cu_id_tag)
@@ -512,10 +550,11 @@ async def _close_github_issue(session, issue):
 
 
 async def _get_clickup_task_data(
-        session, cu_tasks, cu_id_custom=None, cu_id=None
+        session, cu_id_custom=None, cu_id=None
 ):
     task_data = _get_clickup_task_data_by_cu_id(
-        cu_tasks, cu_id_custom, cu_id)
+        cu_id_custom, cu_id)
+
     if not task_data:
         # task was moved to another list
         # get the task data from clickup
@@ -523,10 +562,14 @@ async def _get_clickup_task_data(
         task_data = await _get_clickup_task(
             session, cu_id)
 
+        if task_data:
+            # update cashed clickup tasks
+            CTX.clickup_tasks[task_data["name"]] = task_data
+
     return task_data
 
 
-def _get_clickup_task_data_by_cu_id(cu_tasks, cu_id_custom=None, cu_id=None):
+def _get_clickup_task_data_by_cu_id(cu_id_custom=None, cu_id=None):
     """This function searches through a dictionary of ClickUp tasks
 
     Returns the task data for a specific task that matches either
@@ -544,7 +587,7 @@ def _get_clickup_task_data_by_cu_id(cu_tasks, cu_id_custom=None, cu_id=None):
             or None if no match is found.
     """
     task_data = None
-    for _, cu_task_data in cu_tasks.items():
+    for _, cu_task_data in CTX.clickup_tasks.items():
         if cu_task_data["id"] == cu_id:
             task_data = cu_task_data
             break
@@ -726,13 +769,18 @@ async def _fix_clickup_task_description(session, issue, cu_task_data):
         f"Fixing description of task: {issue['number']}:{cu_task_data['id']}}}"
     )
 
+    # update clickup task description in cached data
+    cu_task_data["description"] = markdown
+
     return await _update_clickup_task(session, cu_task_data["id"], {
         "markdown_description": markdown
     })
 
 
 async def sync_issues_to_clickup(
-        from_issue_number, to_issue_number, remove_temp_files=True):
+        from_issue_number=None, to_issue_number=None,
+        issue_number=None, remove_temp_files=True
+):
     """Sync issues from Github to Clickup."""
     # remove temp files if exists
     if remove_temp_files and os.path.exists(JSON_ISSUES_FILE_PATH):
@@ -743,18 +791,22 @@ async def sync_issues_to_clickup(
 
     async with aiohttp.ClientSession() as session:
         # check if the issue title is not already created in clickup tasks
-        cu_tasks = await _get_all_clickup_tasks(session)
-        print(f"ClickUp tasks amount: {len(cu_tasks)}")
+        CTX.clickup_tasks = await _get_all_clickup_tasks(session)
+        print(f"ClickUp tasks amount: {len(CTX.clickup_tasks)}")
 
-        _aggregate_custom_attributes(cu_tasks.values())
-        pprint(CTX.cu_custom_attributes)
+        _aggregate_custom_attributes(CTX.clickup_tasks.values())
+        print(pformat(CTX.cu_custom_attributes))
 
         async_tasks = []
+        if issue_number:
+            from_issue_number = issue_number
+            to_issue_number = issue_number
+
         # get all issues from github
         issues = _get_issues_from_repository(
             from_issue_number, to_issue_number)
         # iterate through all issues
-        for issue in issues:
+        for issue_number, issue in issues.items():
             # get cuID from issue body
             cu_id_tag = _get_clickup_cuid_tag(issue["body"])
             print(f"Processing Issue: {issue['number']} with {cu_id_tag}")
@@ -782,7 +834,7 @@ async def sync_issues_to_clickup(
                     async_tasks.append(
                         asyncio.ensure_future(
                             _create_task_in_clickup(
-                                session, issue, cu_tasks, cu_id_tag)
+                                session, issue, cu_id_tag)
                         )
                     )
                     continue
@@ -790,7 +842,7 @@ async def sync_issues_to_clickup(
                 print(f"Updating task in Clickup: {cu_id_tag}")
 
                 task_data = await _get_clickup_task_data(
-                        session, cu_tasks, cu_id_custom, cu_id)
+                        session, cu_id_custom, cu_id)
 
                 if (
                     task_data
@@ -818,14 +870,13 @@ async def sync_issues_to_clickup(
                 async_tasks.append(
                     asyncio.ensure_future(
                         _create_task_in_clickup(
-                            session, issue, cu_tasks)
+                            session, issue)
                     )
                 )
 
-        for issue in issues:
+        for issue_number, issue in issues.items():
             # get cuID from issue body
             cu_id_tag = _get_clickup_cuid_tag(issue["body"])
-            print(f"Syncing Issue status: {issue['number']} with {cu_id_tag}")
 
             if cu_id_tag:
                 # check if url https://app.clickup.com exists
@@ -837,7 +888,7 @@ async def sync_issues_to_clickup(
                     cu_id = url_in_tag.split("/")[-1]
 
                     task_data = await _get_clickup_task_data(
-                        session, cu_tasks, cu_id_custom, cu_id)
+                        session, cu_id_custom, cu_id)
 
                     # make status sync
                     if (
@@ -847,6 +898,10 @@ async def sync_issues_to_clickup(
                             'Deleted',
                         ]
                     ):
+                        print(
+                            f"Closing issue: {issue['number']} "
+                            f"with {cu_id_tag}"
+                        )
                         async_tasks.append(
                             asyncio.ensure_future(
                                 _close_github_issue(session, issue)
@@ -865,15 +920,69 @@ async def sync_issues_to_clickup(
         # execute all tasks and get answers
         await asyncio.gather(*async_tasks)
 
+        # updating json cache file
+        _update_github_issues_json_file(issues, update=True)
+        _update_clickup_tasks_json_file(CTX.clickup_tasks)
 
-# to avoid: `RuntimeError: Event loop is closed` on Windows
-if platform.platform().startswith("Windows"):
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-asyncio.run(
-    sync_issues_to_clickup(
-        from_issue_number=0, to_issue_number=6000, remove_temp_files=True
+@click.command(
+    name="sync-issues",
+    help=(
+        "Sync issues from Github to Clickup"
     )
 )
+@click.option(
+    "--issue-number",
+    type=int,
+    required=False,
+    help="particular issue number to sync (optional)"
+)
+@click.option(
+    "--from-issue-number",
+    type=int,
+    required=False,
+    help="From issue number (optional)"
+)
+@click.option(
+    "--to-issue-number",
+    type=int,
+    required=False,
+    help="To issue number (optional)"
+)
+@click.option(
+    "--remove-temp-files",
+    type=bool,
+    default=False,
+    help="Remove temporary files (optional)"
+)
+def sync_issues(
+    issue_number,
+    from_issue_number,
+    to_issue_number,
+    remove_temp_files,
+):
+    # to avoid: `RuntimeError: Event loop is closed` on Windows
+    if platform.platform().startswith("Windows"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
-print("Done")
+    asyncio.run(
+        sync_issues_to_clickup(
+            issue_number=issue_number,
+            from_issue_number=from_issue_number,
+            to_issue_number=to_issue_number,
+            remove_temp_files=remove_temp_files
+        )
+    )
+
+    print("Done")
+
+
+@click.group()
+def cli():
+    return
+
+
+cli.add_command(sync_issues)
+
+if __name__ == '__main__':
+    cli()
