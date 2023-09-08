@@ -378,7 +378,7 @@ async def _make_clickup_task(
     if custom_fields_from_labels:
         custom_fields.extend(custom_fields_from_labels)
 
-    markdown = _trantktuate_issue_body(issue)
+    markdown = _truncate_issue_body(issue)
 
     payload = {
         "name": issue_title,
@@ -633,7 +633,7 @@ def _aggregate_custom_attributes(all_cu_tasks):
                     break
 
 
-def _trantktuate_issue_body(issue):
+def _truncate_issue_body(issue):
     def _cut_markdown_by_headers(markdown, headers):
         matches = [
             (match.start(), match.end(), match.group())
@@ -713,7 +713,7 @@ def _trantktuate_issue_body(issue):
 async def _fix_clickup_task_description(session, issue, cu_task_data):
     """Fix description of task."""
 
-    markdown = _trantktuate_issue_body(issue)
+    markdown = _truncate_issue_body(issue)
     # compare if cu task description is different from issue body
     if markdown and markdown == cu_task_data.get("description", ""):
         print(f"Description is the same: {issue['number']}")
@@ -872,7 +872,7 @@ if platform.platform().startswith("Windows"):
 
 asyncio.run(
     sync_issues_to_clickup(
-        from_issue_number=0, to_issue_number=6000, remove_temp_files=True
+        from_issue_number=0, to_issue_number=6000, remove_temp_files=False
     )
 )
 
