@@ -872,7 +872,7 @@ if platform.platform().startswith("Windows"):
 
 asyncio.run(
     sync_issues_to_clickup(
-        from_issue_number=0, to_issue_number=6000, remove_temp_files=False
+        from_issue_number=0, to_issue_number=6000, remove_temp_files=True
     )
 )
 
