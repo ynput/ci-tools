@@ -712,9 +712,7 @@ def _trantktuate_issue_body(issue):
 
 async def _fix_clickup_task_description(session, issue, cu_task_data):
     """Fix description of task."""
-    print(
-        f"Fixing description of task: {issue['number']}:{cu_task_data['id']}}}"
-    )
+
     markdown = _trantktuate_issue_body(issue)
     # compare if cu task description is different from issue body
     if markdown and markdown == cu_task_data.get("description", ""):
@@ -723,6 +721,10 @@ async def _fix_clickup_task_description(session, issue, cu_task_data):
 
     if not markdown:
         markdown = issue["body"]
+
+    print(
+        f"Fixing description of task: {issue['number']}:{cu_task_data['id']}}}"
+    )
 
     return await _update_clickup_task(session, cu_task_data["id"], {
         "markdown_description": markdown
