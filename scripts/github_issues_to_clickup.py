@@ -21,9 +21,12 @@ TODO:
 - [ ] only extract relevant text from markdown issue body into clickup task
 - [ ] resync all issues body to clickup tasks as markdown
 - [ ] sync all issue domaine labels to clickup task's custom attributes
+- [ ] function for addressing single issue by number
+- [ ] cli interface
 """
 
 import os
+from pprint import pprint
 import re
 import json
 import platform
@@ -48,6 +51,17 @@ class CTX:
     list_id = os.getenv("CLICKUP_LIST_ID")
     team_id = os.getenv("CLICKUP_TEAM_ID")
     folder_id = os.getenv("CLICKUP_FOLDER_ID")
+    cu_custom_attributes = {
+        "type": {
+            "id": os.getenv("CLICKUP_ISSUETYPE_FIELD_ID"),
+            "options": None
+        },
+        "host": {
+            "id": os.getenv("CLICKUP_DOMAIN_FIELD_ID"),
+            "options": None
+        }
+    }
+    request_sleep_time = 60
 
 
 def _get_issues_from_repository(from_issue_number, to_issue_number):
@@ -77,6 +91,13 @@ def _get_issues_from_repository(from_issue_number, to_issue_number):
                             title
                             body
                             url
+                            labels(first: 100) {
+                                edges {
+                                    node {
+                                        name
+                                    }
+                                }
+                            }
                         }
                         cursor
                         }
@@ -146,7 +167,7 @@ def _get_issues_from_repository(from_issue_number, to_issue_number):
     return return_range(_issues)
 
 
-async def _put_clickup_request(session, url, payload, query):
+async def _post_clickup_request(session, url, payload, query):
     headers_ = {
         "Content-Type": "application/json",
         "Authorization": os.getenv("CLICKUP_API_KEY")
@@ -157,6 +178,38 @@ async def _put_clickup_request(session, url, payload, query):
         headers=headers_,
         params=query
     ) as resp:
+        print(f"CU Post Status: {resp.status}")
+        if resp.status == 429:
+            print(
+                "Rate limit reached, waiting "
+                f"for {CTX.request_sleep_time} seconds"
+            )
+            await asyncio.sleep(CTX.request_sleep_time)
+            return await _get_clickup_request(session, url, query)
+
+        return await resp.json()
+
+
+async def _put_clickup_request(session, url, payload, query):
+    headers_ = {
+        "Content-Type": "application/json",
+        "Authorization": os.getenv("CLICKUP_API_KEY")
+    }
+    async with session.put(
+        url,
+        json=payload,
+        headers=headers_,
+        params=query
+    ) as resp:
+        print(f"CU Put Status: {resp.status}")
+        if resp.status == 429:
+            print(
+                "Rate limit reached, waiting "
+                f"for {CTX.request_sleep_time} seconds"
+            )
+            await asyncio.sleep(CTX.request_sleep_time)
+            return await _get_clickup_request(session, url, query)
+
         return await resp.json()
 
 
@@ -165,11 +218,21 @@ async def _get_clickup_request(session, url, query):
         "Content-Type": "application/json",
         "Authorization": os.getenv("CLICKUP_API_KEY")
     }
+
     async with session.get(
         url,
         headers=headers_,
         params=query
     ) as resp:
+        print(f"CU Get Status: {resp.status}")
+        if resp.status == 429:
+            print(
+                "Rate limit reached, waiting "
+                f"for {CTX.request_sleep_time} seconds"
+            )
+            await asyncio.sleep(CTX.request_sleep_time)
+            return await _get_clickup_request(session, url, query)
+
         return await resp.json()
 
 
@@ -301,24 +364,53 @@ async def _make_clickup_task(
         "custom_task_ids": "true",
         "team_id": CTX.team_id
     }
+    custom_fields_from_labels = _get_custom_fields_from_labels(issue)
+    custom_fields = [
+        {
+            "id": "4f79c492-b1f2-4737-b7fa-6e60c9a67f57",
+            "value": issue_number
+        },
+        {
+            "id": "849ed6ee-4b5d-476d-b559-702490b0ef73",
+            "value": issue_url
+        }
+    ]
+    if custom_fields_from_labels:
+        custom_fields.extend(custom_fields_from_labels)
+
+    markdown = _trantktuate_issue_body(issue)
 
     payload = {
         "name": issue_title,
-        "markdown_description": issue_body,
-        "custom_fields": [
-            {
-                "id": "4f79c492-b1f2-4737-b7fa-6e60c9a67f57",
-                "value": issue_number
-            },
-            {
-                "id": "849ed6ee-4b5d-476d-b559-702490b0ef73",
-                "value": issue_url
-            }
-        ]
+        "markdown_description": markdown or issue_body,
+        "custom_fields": custom_fields
     }
 
     url = (
         f"https://api.clickup.com/api/v2/list/{CTX.list_id}/task")
+
+    response = await _post_clickup_request(session, url, payload, query)
+
+    if "error" in response:
+        print(f"Error: {response['error']}")
+        return
+    elif "err" in response:
+        print(f"Error: {response['err']}")
+        return
+
+    return response
+
+
+async def _update_clickup_task(
+        session, cu_task_id, payload):
+
+    query = {
+        "custom_task_ids": "true",
+        "team_id": CTX.team_id
+    }
+
+    url = (
+        f"https://api.clickup.com/api/v2/task/{cu_task_id}")
 
     response = await _put_clickup_request(session, url, payload, query)
 
@@ -479,6 +571,164 @@ async def _get_clickup_folder_list_ids(session, folder_id):
     return {list_["id"]: list_["name"] for list_ in response["lists"]}
 
 
+def _get_custom_fields_from_labels(issue):
+    """Set labels to clickup task."""
+    issue_labels = [label["node"]["name"] for label in issue["labels"]["edges"]]
+    print(f"Issue labels: {issue_labels}")
+    custom_fields_to_set = []
+    # only one host is allowed
+    host_field = None
+    for label in issue_labels:
+        print(f"Processing label: {label}")
+        for field, field_data in CTX.cu_custom_attributes.items():
+            if field not in label.lower():
+                continue
+
+            if not field_data["options"]:
+                print(f"Options for {field} not found")
+                continue
+
+            if host_field and field == "host":
+                print(f"Host field already set: {host_field}")
+                continue
+
+            label_trimmed = label.replace(f"{field}:", "").strip()
+            option = None
+            for option_name, option_order in field_data["options"].items():
+                if label_trimmed.lower() in option_name.lower():
+                    option = option_order
+
+            if option is None:
+                print(f"Option for {field} not found")
+                continue
+
+            if "host" in field and host_field is None:
+                host_field = option
+
+            custom_fields_to_set.append(
+                {
+                    "id": field_data["id"],
+                    "value": option
+                }
+            )
+
+        if len(custom_fields_to_set) == 2:
+            break
+
+    return custom_fields_to_set
+
+
+def _aggregate_custom_attributes(all_cu_tasks):
+    for field in CTX.cu_custom_attributes.values():
+        for task_data in all_cu_tasks:
+            if not task_data.get("custom_fields"):
+                continue
+            for custom_field in task_data["custom_fields"]:
+                if custom_field["id"] == field["id"]:
+                    field["options"] = \
+                        {
+                            op["name"]: op["orderindex"]
+                            for op in custom_field["type_config"]["options"]
+                        }
+                    break
+
+
+def _trantktuate_issue_body(issue):
+    def _cut_markdown_by_headers(markdown, headers):
+        matches = [
+            (match.start(), match.end(), match.group())
+            for header in headers for match in re.finditer(re.escape(header), markdown)
+        ]
+        matches.sort()
+
+        chunks = {}
+        for i in range(len(matches)-1):
+            header = matches[i][2]
+            start_index = matches[i][1]
+            end_index = matches[i+1][0]
+            content = markdown[start_index:end_index].strip()
+            if not content:
+                continue
+            if "_No response_" in content:
+                continue
+
+            if "\n###" in content:
+                content = content.split("\n###")[0].strip()
+
+            if "\n[cuID" in content:
+                content = content.split("\n[cuID")[0].strip()
+
+            chunks[header] = content
+
+
+        # for last header, end index will be end of string
+        if len(matches) > 0:
+            header = matches[-1][2]
+            start_index = matches[-1][1]
+            content = markdown[start_index:].strip()
+
+            if not content:
+                return chunks
+
+            if "\n###" in content:
+                content = content.split("\n###")[0].strip()
+
+            if "\n[cuID" in content:
+                content = content.split("\n[cuID")[0].strip()
+
+            if "_No response_" in content:
+                return chunks
+
+            chunks[header] = content
+
+        return chunks
+
+    description_headers = [
+        "### Current Behavior:",
+        "### Expected Behavior:",
+        "### Version",
+        "### Steps To Reproduce:",
+        "### Relevant log output:",
+        "### Additional context:",
+        "### Please describe the feature you have in mind and explain what the current shortcomings are?",
+        "### How would you imagine the implementation of the feature?",
+        "### Describe alternatives you've considered:",
+        "### Additional context:"
+    ]
+    markdown_dict = _cut_markdown_by_headers(
+        issue["body"], description_headers)
+
+    if not markdown_dict:
+        print(f"Markdown dict is empty: {issue['number']}")
+        return
+
+    # create long markdown string from dict
+    markdown = ""
+    for key, value in markdown_dict.items():
+        markdown += f"{key}\n\n{value}\n\n"
+
+    return markdown
+
+
+async def _fix_clickup_task_description(session, issue, cu_task_data):
+    """Fix description of task."""
+    print(
+        f"Fixing description of task: {issue['number']}:{cu_task_data['id']}}}"
+    )
+    markdown = _trantktuate_issue_body(issue)
+    # compare if cu task description is different from issue body
+    if markdown and markdown == cu_task_data.get("description", ""):
+        print(f"Description is the same: {issue['number']}")
+        return
+
+    if not markdown:
+        markdown = issue["body"]
+
+    return await _update_clickup_task(session, cu_task_data["id"], {
+        "markdown_description": markdown
+    })
+
+
 async def sync_issues_to_clickup(
         from_issue_number, to_issue_number, remove_temp_files=True):
     """Sync issues from Github to Clickup."""
@@ -493,6 +743,9 @@ async def sync_issues_to_clickup(
         # check if the issue title is not already created in clickup tasks
         cu_tasks = await _get_all_clickup_tasks(session)
         print(f"ClickUp tasks amount: {len(cu_tasks)}")
+
+        _aggregate_custom_attributes(cu_tasks.values())
+        pprint(CTX.cu_custom_attributes)
 
         async_tasks = []
         # get all issues from github
@@ -584,6 +837,7 @@ async def sync_issues_to_clickup(
                     task_data = await _get_clickup_task_data(
                         session, cu_tasks, cu_id_custom, cu_id)
 
+                    # make status sync
                     if (
                         task_data
                         and task_data['status']['status'] in [
@@ -596,13 +850,18 @@ async def sync_issues_to_clickup(
                                 _close_github_issue(session, issue)
                             )
                         )
+                    elif task_data:
+                        # fix description of task
+                        async_tasks.append(
+                            asyncio.ensure_future(
+                                _fix_clickup_task_description(
+                                    session, issue, task_data)
+                            )
+                        )
                     continue
 
         # execute all tasks and get answers
-        responses = await asyncio.gather(*async_tasks)
-
-        for response in responses:
-            print(response)
+        await asyncio.gather(*async_tasks)
 
 
 # to avoid: `RuntimeError: Event loop is closed` on Windows
@@ -611,7 +870,7 @@ if platform.platform().startswith("Windows"):
 
 asyncio.run(
     sync_issues_to_clickup(
-        from_issue_number=5579, to_issue_number=5700, remove_temp_files=False
+        from_issue_number=0, to_issue_number=6000, remove_temp_files=True
     )
 )
 
