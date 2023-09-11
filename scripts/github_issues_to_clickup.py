@@ -272,12 +272,9 @@ async def _get_clickup_task(
         "custom_task_ids": "true",
         "team_id": CTX.team_id
     }
-    print(query)
 
     url = (
         f"https://api.clickup.com/api/v2/task/{cu_id_hash}")
-
-    print(url)
 
     response = await _get_clickup_request(session, url, query)
 
