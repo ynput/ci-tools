@@ -559,7 +559,7 @@ async def _get_clickup_task_data(
         task_data = await _get_clickup_task(
             session, cu_id)
 
-        if task_data:
+        if task_data.get("name"):
             # update cashed clickup tasks
             CTX.clickup_tasks[task_data["name"]] = task_data
 
