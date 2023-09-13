@@ -35,6 +35,8 @@ from dotenv import load_dotenv
 import requests
 import asyncio
 import aiohttp
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.metrics.pairwise import cosine_similarity
 
 load_dotenv()
 
@@ -750,6 +752,15 @@ def _truncate_issue_body(issue):
     return markdown
 
 
+def _compare_similarity(text1, text2):
+    # create tfidf vectorizer
+    vectorizer = TfidfVectorizer()
+    tfidf = vectorizer.fit_transform([text1, text2])
+
+    # calculate the similarity
+    return cosine_similarity(tfidf[0:1], tfidf[1:2])[0][0]
+
+
 async def _fix_clickup_task_description(session, issue, cu_task_data):
     """Fix description of task."""
 
@@ -761,6 +772,17 @@ async def _fix_clickup_task_description(session, issue, cu_task_data):
 
     if not markdown:
         markdown = issue["body"]
+
+    text_similarity = _compare_similarity(
+        markdown, cu_task_data.get("description", "")
+    )
+
+    if text_similarity > 0.9:
+        print(
+            f"Description is similar: {issue['number']}, "
+            f"similarity: {text_similarity}"
+        )
+        return
 
     print(
         f"Fixing description of task: {issue['number']}:{cu_task_data['id']}}}"
