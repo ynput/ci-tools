@@ -131,3 +131,14 @@ dmypy.json
 temp_file_cu_tasks.json
 
 temp_file_issues.json
+
+
+.poetry/
+
+scripts/activity.csv
+
+scripts/data_repos.json
+
+scripts/data_users.json
+
+poetry.lock
