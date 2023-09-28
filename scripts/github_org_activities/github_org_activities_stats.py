@@ -19,32 +19,27 @@ The script should be run daily to obtain the following metrics:
 - Daily activity of any PR-related activity (except creating and merging own author PRs) per user.
 
 """
-from urllib import response
 import pytz
 import datetime
 import json
 import os
+from dotenv import load_dotenv
 import pandas as pd
-
-from pprint import pprint
 import requests
 
+load_dotenv()
 
 JSON_FILE_USERS = os.path.join(os.path.dirname(__file__), "data_users.json")
 JSON_FILE_REPOS = os.path.join(os.path.dirname(__file__), "data_repos.json")
 CSV_FILE = os.path.join(os.path.dirname(__file__), "activity.csv")
-
-# Set the personal access token and headers
-token = ""
-
+LOCAL_TIMEZONE = pytz.timezone('Europe/Berlin')
 HEADERS = {
-    "Authorization": f"Bearer {token}"
+    "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}"
 }
 
 # Get the organization name from the user
 ORG_NAME = "ynput"
 TEAM_NAME = "coreteam"
-LOCAL_TIMEZONE = pytz.timezone('Europe/Berlin')
 
 
 def get_timerange():
@@ -65,6 +60,7 @@ def utc_to_local(utc_dt):
 
 def get_all_pulls(cached=False):
     if os.path.exists(JSON_FILE_REPOS) and cached:
+        print("cached pulls data --------------")
         with open(JSON_FILE_REPOS) as json_file:
             return json.load(json_file)
 
@@ -239,8 +235,10 @@ def get_all_pulls(cached=False):
     with open(JSON_FILE_REPOS, 'w') as outfile:
         json.dump(data_repos, outfile, indent=4)
 
-def get_all_members():  # sourcery skip: pandas-avoid-inplace
-    if os.path.exists(JSON_FILE_USERS):
+def get_all_members(cached=False):
+
+    if os.path.exists(JSON_FILE_USERS) and cached:
+        print("cached members data --------------")
         with open(JSON_FILE_USERS) as json_file:
             events_activity = json.load(json_file)
     else:
@@ -299,67 +297,104 @@ def get_all_members():  # sourcery skip: pandas-avoid-inplace
 
     activity = {}
     for member in events_activity:
-        login = member
         events = events_activity[member]["events"]
-        activity[login] = []
         for event in events:
-            # TODO: own or other PR?
-            # TODO: add event ID into column
-            # TODO: PR number
-            # TODO: what repository?
-            # TODO: url to the activity
             # TODO: assignee
             # TODO: reviewers
             # TODO: aggregate all prs separately to own table
             # TODO: CU task availability - but do it before with all aggregated PRs
-            utc_dt = datetime.datetime.strptime(
+            event_data = get_event_data(member, event)
+
+            activity[event["id"]] = event_data
+
+    output_records = write_activity_to_csv(activity)
+    print("activity --------------")
+    json_output_records = json.dumps(output_records, indent=4)
+    print(json_output_records)
+
+
+def get_event_data(member, event):
+    utc_dt = datetime.datetime.strptime(
                 event["created_at"], "%Y-%m-%dT%H:%M:%SZ"
             )
-            utc_local = utc_to_local(utc_dt)
-            activity[login].append({
+    utc_local = utc_to_local(utc_dt)
+
+            # get user from payload if available
+    subject_owner = (
+                event["payload"].get("issue", {}).get("user", {}).get("login", None) or
+                event["payload"].get("pull_request", {}).get("user", {}).get("login", None)
+            )
+
+            # get url to the activity found in payload
+    activity_url = (
+                event["payload"].get("review", {}).get("html_url", None) or
+                event["payload"].get("comment", {}).get("html_url", None)
+            )
+
+    github_number = (
+                event["payload"].get("issue", {}).get("number", None) or
+                event["payload"].get("pull_request", {}).get("number", None)
+            )
+    github_url = (
+                event["payload"].get("issue", {}).get("html_url", None) or
+                event["payload"].get("pull_request", {}).get("html_url", None)
+            )
+    is_pr = bool(
+                event["payload"].get("issue", {}).get("pull_request", None) or
+                event["payload"].get("pull_request", {}).get("html_url", None)
+            )
+    event_data = {
+                "repository": event["repo"]["name"],
                 "type": event["type"],
-                "timestamp": utc_local
+                "created_at": str(utc_local),
+                "user": member,
+                "github_number": github_number,
+                "github_url": github_url,
+                "is_pr": is_pr,
+                "subject_owner": subject_owner == member,
+                "activity_url": activity_url
+            }
 
-            })
-
-
-    write_activity_to_csv(activity)
+    return event_data
 
 
 def write_activity_to_csv(activity):
-    # convert activity to pandas dataframe as timeseries data where timestemp is index and user is column and event_type is column
-    df = pd.DataFrame.from_dict(
-        {
-            (event["timestamp"]): {"user": user, "event_type": event["type"]}
-            for user, events in activity.items()
-            for event in events
-        },
-        orient='index'
-    )
+    # convert activity to pandas dataframe
+    df = pd.DataFrame.from_dict(activity, orient='index')
+
     # sort by index
     df.sort_index(inplace=True)
 
     if os.path.exists(CSV_FILE):
-        # read already created CSV FILE and append new data but make sure there
-        # are no duplicates
+        # read already created CSV FILE
         df_old = pd.read_csv(CSV_FILE, sep=';', encoding='utf-8', index_col=0)
-        df_old.index = pd.to_datetime(df_old.index)
 
-        # merge df and df_old but make sure no duplicate rows are added
-        df = pd.concat([df_old, df], axis=0)
-        df = df[~df.index.duplicated(keep='first')]
+        # set index to string so it is comparable
+        df_old.index = df_old.index.astype(str)
 
-        # sort by index
-        df.sort_index(inplace=True)
+        # find different raws between df and df_old
+        diff_df = df[~df.index.isin(df_old.index)]
+        diff_df.sort_index(inplace=True)
+
+        # only append difference to already existing CSV_FILE
+        diff_df.to_csv(
+            CSV_FILE,
+            sep=';',
+            encoding='utf-8',
+            mode='a',
+            header=False
+        )
+        return diff_df.to_dict("index")
 
     # write to csv
-    df.to_csv(CSV_FILE, sep=';', encoding='utf-8')
+    df.to_csv(CSV_FILE, sep=';', encoding='utf-8', index=True)
+    return df.to_dict("index")
 
 
 def main():
     get_timerange()
-    get_all_pulls()
-    get_all_members()
+    get_all_pulls(True)
+    get_all_members(True)
 
 
 if __name__ == "__main__":
