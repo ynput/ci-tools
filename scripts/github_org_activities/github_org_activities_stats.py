@@ -19,11 +19,12 @@ The script should be run daily to obtain the following metrics:
 - Daily activity of any PR-related activity (except creating and merging own author PRs) per user.
 
 """
+from urllib import response
 import pytz
-import csv
 import datetime
 import json
 import os
+import pandas as pd
 
 from pprint import pprint
 import requests
@@ -34,7 +35,8 @@ JSON_FILE_REPOS = os.path.join(os.path.dirname(__file__), "data_repos.json")
 CSV_FILE = os.path.join(os.path.dirname(__file__), "activity.csv")
 
 # Set the personal access token and headers
-token = "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"
+token = ""
+
 HEADERS = {
     "Authorization": f"Bearer {token}"
 }
@@ -88,7 +90,7 @@ def get_all_pulls(cached=False):
     query($orgName: String!, $repoName: String!, $cursor: String) {
         organization(login: $orgName) {
             repository(name: $repoName) {
-                pullRequests(first: 100, after: $cursor, states: [OPEN], orderBy: {field: CREATED_AT, direction: DESC}) {
+                pullRequests(first: 20, after: $cursor, states: [OPEN], orderBy: {field: CREATED_AT, direction: DESC}) {
                     pageInfo {
                         hasNextPage
                         endCursor
@@ -176,6 +178,12 @@ def get_all_pulls(cached=False):
             json={"query": query_repos, "variables": variables},
             headers=HEADERS
         )
+        if (
+                response_pulls.json()["data"] is None
+                and "errors" in response_pulls.json()
+        ):
+            print(response_pulls.json())
+            break
         # Parse the response
         data = response_pulls.json()["data"]["organization"]["repositories"]["edges"]
         for repo in data:
@@ -191,29 +199,39 @@ def get_all_pulls(cached=False):
         else:
             break
 
-
     # iterate all repos in data_repos and get all pulls via graphql query `query_pulls`
     for repo in data_repos:
+        page_index = 0
         variables = {"orgName": ORG_NAME, "repoName": repo, "cursor": None}
         while True:
+            print("-" * 20 + "> " + f"{repo} > page: {page_index}")
             # Send the GraphQL request
             response_pulls = requests.post(
                 "https://api.github.com/graphql",
                 json={"query": query_pulls, "variables": variables},
                 headers=HEADERS
             )
+
+            if (
+                response_pulls.json()["data"] is None
+                and "errors" in response_pulls.json()
+            ):
+                print(response_pulls.json())
+                break
+
             # Parse the response
             data = response_pulls.json()["data"]["organization"]["repository"]["pullRequests"]["edges"]
             for pull in data:
                 pull_number = pull["node"]["number"]
 
                 data_repos[repo][pull_number] = pull["node"]
-                print(pull_number)
+                print(f"{repo}: {pull_number}")
 
             # Check if there are more pages
             page_info = response_pulls.json()["data"]["organization"]["repository"]["pullRequests"]["pageInfo"]
             if page_info["hasNextPage"]:
                 variables["cursor"] = page_info["endCursor"]
+                page_index += 1
             else:
                 break
 
@@ -221,7 +239,7 @@ def get_all_pulls(cached=False):
     with open(JSON_FILE_REPOS, 'w') as outfile:
         json.dump(data_repos, outfile, indent=4)
 
-def get_all_members():
+def get_all_members():  # sourcery skip: pandas-avoid-inplace
     if os.path.exists(JSON_FILE_USERS):
         with open(JSON_FILE_USERS) as json_file:
             events_activity = json.load(json_file)
@@ -253,7 +271,7 @@ def get_all_members():
             json={"query": query_users, "variables": variables},
             headers=HEADERS
         )
-
+        print(response_users.json())
         # Get the response data
         members = (
             response_users.json()
@@ -286,6 +304,7 @@ def get_all_members():
         activity[login] = []
         for event in events:
             # TODO: own or other PR?
+            # TODO: add event ID into column
             # TODO: PR number
             # TODO: what repository?
             # TODO: url to the activity
@@ -303,23 +322,43 @@ def get_all_members():
 
             })
 
+
     write_activity_to_csv(activity)
 
 
 def write_activity_to_csv(activity):
-    with open(CSV_FILE, "w", newline="") as csvfile:
-        fieldnames = ["user", "event_type", "timestamp"]
-        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+    # convert activity to pandas dataframe as timeseries data where timestemp is index and user is column and event_type is column
+    df = pd.DataFrame.from_dict(
+        {
+            (event["timestamp"]): {"user": user, "event_type": event["type"]}
+            for user, events in activity.items()
+            for event in events
+        },
+        orient='index'
+    )
+    # sort by index
+    df.sort_index(inplace=True)
 
-        writer.writeheader()
-        for user, events in activity.items():
-            for event in events:
-                writer.writerow({"user": user, "event_type": event["type"], "timestamp": event["timestamp"]})
+    if os.path.exists(CSV_FILE):
+        # read already created CSV FILE and append new data but make sure there
+        # are no duplicates
+        df_old = pd.read_csv(CSV_FILE, sep=';', encoding='utf-8', index_col=0)
+        df_old.index = pd.to_datetime(df_old.index)
+
+        # merge df and df_old but make sure no duplicate rows are added
+        df = pd.concat([df_old, df], axis=0)
+        df = df[~df.index.duplicated(keep='first')]
+
+        # sort by index
+        df.sort_index(inplace=True)
+
+    # write to csv
+    df.to_csv(CSV_FILE, sep=';', encoding='utf-8')
 
 
 def main():
     get_timerange()
-    get_all_pulls(True)
+    get_all_pulls()
     get_all_members()
 
 

@@ -142,3 +142,9 @@ scripts/data_repos.json
 scripts/data_users.json
 
 poetry.lock
+
+scripts/github_org_activities/activity.csv
+
+scripts/github_org_activities/data_repos.json
+
+scripts/github_org_activities/data_users.json
