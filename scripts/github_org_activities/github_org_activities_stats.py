@@ -38,8 +38,8 @@ HEADERS = {
 }
 
 # Get the organization name from the user
-ORG_NAME = "ynput"
-TEAM_NAME = "coreteam"
+ORG_NAME = os.getenv('GITHUB_ORGANIZATION')
+TEAM_NAME = os.getenv('GITHUB_TEAM')
 
 
 def get_timerange():
