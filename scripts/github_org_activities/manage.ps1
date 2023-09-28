@@ -30,10 +30,10 @@ function InstallVenv {
     if (!(Test-Path -Path $poetry_executable)) {
         Write-Host "Poetry not installed"
         InstallPoetry
-    } else {
-        Write-Host "Installing venv with poetry executable ""$poetry_executable"""
-        & $poetry_executable install
     }
+
+    Write-Host "Installing venv with poetry executable ""$poetry_executable"""
+    & $poetry_executable install
 }
 
 function main {
