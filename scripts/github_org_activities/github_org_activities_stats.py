@@ -19,10 +19,13 @@ The script should be run daily to obtain the following metrics:
 - Daily activity of any PR-related activity (except creating and merging own author PRs) per user.
 
 """
+from cProfile import label
+from hashlib import sha1
 import pytz
 import datetime
 import json
 import os
+from pprint import pprint
 from dotenv import load_dotenv
 import pandas as pd
 import requests
@@ -31,7 +34,9 @@ load_dotenv()
 
 JSON_FILE_USERS = os.path.join(os.path.dirname(__file__), "data_users.json")
 JSON_FILE_REPOS = os.path.join(os.path.dirname(__file__), "data_repos.json")
-CSV_FILE = os.path.join(os.path.dirname(__file__), "activity.csv")
+USER_CSV_FILE = os.path.join(os.path.dirname(__file__), "user_activities.csv")
+PR_CSV_FILE = os.path.join(os.path.dirname(__file__), "pr_activities.csv")
+
 LOCAL_TIMEZONE = pytz.timezone('Europe/Berlin')
 HEADERS = {
     "Authorization": f"Bearer {os.getenv('GITHUB_TOKEN')}"
@@ -42,15 +47,10 @@ ORG_NAME = os.getenv('GITHUB_ORGANIZATION')
 TEAM_NAME = os.getenv('GITHUB_TEAM')
 
 
-def get_timerange():
-    # Get the current date and time
-    now = datetime.datetime.now()
-
-    # Get the past 24 hours
-    past_24_hours = (now - datetime.timedelta(hours=24)).strftime("%Y-%m-%dT%H:%M:%S")
-    print(past_24_hours)
-
-    return past_24_hours
+def get_current_time():
+    # Get the current date and time with the timezone
+    now = datetime.datetime.now(tz=pytz.utc).astimezone(LOCAL_TIMEZONE)
+    return LOCAL_TIMEZONE.normalize(now)
 
 
 def utc_to_local(utc_dt):
@@ -75,6 +75,13 @@ def get_all_pulls(cached=False):
                 edges {
                     node {
                         name
+                        isArchived
+                        isFork
+                        isLocked
+                        isTemplate
+                        pullRequests(first: 1) {
+                            totalCount
+                        }
                     }
                 }
             }
@@ -180,22 +187,42 @@ def get_all_pulls(cached=False):
         ):
             print(response_pulls.json())
             break
+
+        response_json = response_pulls.json()
+        repos_data = response_json["data"]["organization"]["repositories"]
+
         # Parse the response
-        data = response_pulls.json()["data"]["organization"]["repositories"]["edges"]
-        for repo in data:
+        _data_page = repos_data["edges"]
+
+        for repo in _data_page:
             repo_name = repo["node"]["name"]
-            if not repo_name in data_repos:
+            pr_count = repo["node"]["pullRequests"]["totalCount"]
+            # skip if repo is archived, locked or template or it has no PRs
+            if (
+                repo["node"]["isArchived"]
+                or repo["node"]["isLocked"]
+                or repo["node"]["isTemplate"]
+                or pr_count == 0
+            ):
+                continue
+
+            if repo_name not in data_repos:
                 data_repos[repo_name] = {}
-            print(repo_name)
+                print(
+                    f"Adding repo '{repo_name}' for rather processing. "
+                    f"'{pr_count}' pullrequests in total."
+                )
 
         # Check if there are more pages
-        page_info = response_pulls.json()["data"]["organization"]["repositories"]["pageInfo"]
+        page_info = repos_data["pageInfo"]
+
         if page_info["hasNextPage"]:
             variables["cursor"] = page_info["endCursor"]
         else:
             break
 
-    # iterate all repos in data_repos and get all pulls via graphql query `query_pulls`
+    # iterate all repos in data_repos and get all pulls via
+    # graphql query `query_pulls`
     for repo in data_repos:
         page_index = 0
         variables = {"orgName": ORG_NAME, "repoName": repo, "cursor": None}
@@ -235,7 +262,10 @@ def get_all_pulls(cached=False):
     with open(JSON_FILE_REPOS, 'w') as outfile:
         json.dump(data_repos, outfile, indent=4)
 
-def get_all_members(cached=False):
+    return data_repos
+
+
+def get_all_members_activity_data(cached=False):
 
     if os.path.exists(JSON_FILE_USERS) and cached:
         print("cached members data --------------")
@@ -285,6 +315,9 @@ def get_all_members(cached=False):
         # Iterate over all the teams in the organization
         for member in members:
             login = member["login"]
+            # exclude bot user
+            if login == "ynbot":
+                continue
             events_response = requests.get(f'https://api.github.com/users/{login}/events/public', headers=HEADERS)
             events = events_response.json()
             events_activity[login] = {
@@ -295,79 +328,171 @@ def get_all_members(cached=False):
         with open(JSON_FILE_USERS, 'w') as outfile:
             json.dump(events_activity, outfile, indent=4)
 
+    return events_activity
+
+
+def process_user_activity_data(events_activity, repos_activity_data):
     activity = {}
     for member in events_activity:
         events = events_activity[member]["events"]
         for event in events:
-            # TODO: assignee
-            # TODO: reviewers
-            # TODO: aggregate all prs separately to own table
-            # TODO: CU task availability - but do it before with all aggregated PRs
-            event_data = get_event_data(member, event)
+            event_data = get_event_data(member, event, repos_activity_data)
+            if event_data:
+                activity[event["id"]] = event_data
 
-            activity[event["id"]] = event_data
-
-    output_records = write_activity_to_csv(activity)
-    print("activity --------------")
+    output_records = write_activity_to_csv(activity, USER_CSV_FILE)
     json_output_records = json.dumps(output_records, indent=4)
-    print(json_output_records)
+
+    # output for n8n
+    # print(json_output_records)
 
 
-def get_event_data(member, event):
+def get_event_data(member, event, repos_activity_data):
+    # excluded activities
+    excluded_activities = [
+        "WatchEvent", "PushEvent", "CreateEvent", "DeleteEvent", "ForkEvent",
+        "GollumEvent", "MemberEvent", "ReleaseEvent"
+    ]
+
+    org_activity = True
+    activity_type = event["type"]
+
+    if activity_type in excluded_activities:
+        return None
+
     utc_dt = datetime.datetime.strptime(
-                event["created_at"], "%Y-%m-%dT%H:%M:%SZ"
-            )
+        event["created_at"], "%Y-%m-%dT%H:%M:%SZ"
+    )
     utc_local = utc_to_local(utc_dt)
+    repo_full_name = event["repo"]["name"]
 
-            # get user from payload if available
+    # get user from payload if available
     subject_owner = (
-                event["payload"].get("issue", {}).get("user", {}).get("login", None) or
-                event["payload"].get("pull_request", {}).get("user", {}).get("login", None)
-            )
+        event["payload"].get("issue", {}).get("user", {}).get("login", None) or
+        event["payload"].get("pull_request", {}).get("user", {}).get("login", None)
+    )
 
-            # get url to the activity found in payload
+    # get url to the activity found in payload
     activity_url = (
-                event["payload"].get("review", {}).get("html_url", None) or
-                event["payload"].get("comment", {}).get("html_url", None)
-            )
+        event["payload"].get("review", {}).get("html_url", None) or
+        event["payload"].get("comment", {}).get("html_url", None)
+    )
 
     github_number = (
-                event["payload"].get("issue", {}).get("number", None) or
-                event["payload"].get("pull_request", {}).get("number", None)
-            )
+        event["payload"].get("issue", {}).get("number", None) or
+        event["payload"].get("pull_request", {}).get("number", None)
+    )
     github_url = (
-                event["payload"].get("issue", {}).get("html_url", None) or
-                event["payload"].get("pull_request", {}).get("html_url", None)
-            )
+        event["payload"].get("issue", {}).get("html_url", None) or
+        event["payload"].get("pull_request", {}).get("html_url", None)
+    )
     is_pr = bool(
-                event["payload"].get("issue", {}).get("pull_request", None) or
-                event["payload"].get("pull_request", {}).get("html_url", None)
-            )
+        event["payload"].get("issue", {}).get("pull_request", None) or
+        event["payload"].get("pull_request", {}).get("html_url", None)
+    )
+
+    repo_name = repo_full_name.split("/")[-1]
+    matching_repo = False
+    matching_pr = None
+    for _id, pr_data in repos_activity_data.items():
+        if pr_data["repository"] != repo_name:
+            continue
+
+        matching_repo = True
+
+        if pr_data["number"] == str(github_number):
+            matching_pr = pr_data
+            break
+
+    if matching_pr:
+        complexity_index = matching_pr["complexity_index"]
+    else:
+        _id = None
+        complexity_index = None
+
     event_data = {
-                "repository": event["repo"]["name"],
-                "type": event["type"],
-                "created_at": str(utc_local),
-                "user": member,
-                "github_number": github_number,
-                "github_url": github_url,
-                "is_pr": is_pr,
-                "subject_owner": subject_owner == member,
-                "activity_url": activity_url
-            }
+        "repository": repo_full_name,
+        "type": event["type"],
+        "created_at": str(utc_local),
+        "user": member,
+        "github_number": github_number,
+        "github_url": github_url,
+        "is_pr": is_pr,
+        "pr_activity_id": _id,
+        "subject_owner": subject_owner == member,
+        "activity_url": activity_url,
+        "pr_complexity_index": complexity_index,
+        "org_activity": matching_repo
+    }
 
     return event_data
 
 
-def write_activity_to_csv(activity):
+def get_pr_activities(org_pulls_data):
+    """Get all organisation pr activies as pandas dataframe
+    """
+    current_time = get_current_time()
+    org_activity = {}
+    for repo_name, pulls in org_pulls_data.items():
+        for pull_number, pull_data in pulls.items():
+            # convert pull_data to sha1 hash with 12 chars
+            _id = sha1(json.dumps(pull_data, sort_keys=True).encode('utf-8')).hexdigest()
+
+            # get all assignees number
+            assignees_number = len(pull_data["assignees"]["edges"])
+            reviews_number = len(pull_data["reviews"]["edges"])
+            participants_number = len(pull_data["participants"]["edges"])
+            review_requests_number = len(pull_data["reviewRequests"]["edges"])
+            labels_number = len(pull_data["labels"]["edges"])
+
+            # calculate complexity index from above quantities
+            complexity_index = int(
+                assignees_number + reviews_number + participants_number +
+                review_requests_number + labels_number
+            )
+
+            org_activity[_id] = {
+                "activity_capture_time": str(current_time),
+                "repository": repo_name,
+                "author": pull_data["author"]["login"],
+                "number": pull_number,
+                "url": pull_data["url"],
+                "pr_assignees_number": assignees_number,
+                "pr_reviewers_number": reviews_number,
+                "pr_participants_number": participants_number,
+                "pr_review_requests_number": review_requests_number,
+                "head_ref_name": pull_data["headRefName"],
+                "author_association": pull_data["authorAssociation"],
+                "labels_number": labels_number,
+                "changed_files": pull_data["changedFiles"],
+                "total_comments_count": pull_data["totalCommentsCount"],
+                "updated_at": pull_data["updatedAt"],
+                "complexity_index": complexity_index,
+                "review_decision": pull_data["reviewDecision"]
+            }
+
+    return org_activity
+
+
+def process_pr_activity_data(pr_activity_data):
+    output_records = write_activity_to_csv(pr_activity_data, PR_CSV_FILE)
+    print(output_records)
+    json_output_records = json.dumps(output_records, indent=4)
+
+    # output for n8n
+    # print(json_output_records)
+
+
+def write_activity_to_csv(activity, filepath):
     # convert activity to pandas dataframe
     df = pd.DataFrame.from_dict(activity, orient='index')
 
     # sort by index
     df.sort_index(inplace=True)
 
-    if os.path.exists(CSV_FILE):
+    if os.path.exists(filepath):
         # read already created CSV FILE
-        df_old = pd.read_csv(CSV_FILE, sep=';', encoding='utf-8', index_col=0)
+        df_old = pd.read_csv(filepath, sep=';', encoding='utf-8', index_col=0)
 
         # set index to string so it is comparable
         df_old.index = df_old.index.astype(str)
@@ -376,9 +501,9 @@ def write_activity_to_csv(activity):
         diff_df = df[~df.index.isin(df_old.index)]
         diff_df.sort_index(inplace=True)
 
-        # only append difference to already existing CSV_FILE
+        # only append difference to already existing USER_CSV_FILE
         diff_df.to_csv(
-            CSV_FILE,
+            filepath,
             sep=';',
             encoding='utf-8',
             mode='a',
@@ -387,15 +512,19 @@ def write_activity_to_csv(activity):
         return diff_df.to_dict("index")
 
     # write to csv
-    df.to_csv(CSV_FILE, sep=';', encoding='utf-8', index=True)
+    df.to_csv(filepath, sep=';', encoding='utf-8', index=True)
     return df.to_dict("index")
 
 
-def main():
-    get_timerange()
-    get_all_pulls(True)
-    get_all_members(True)
+def main(cached=False):
+    org_pulls_data = get_all_pulls(cached)
+    repos_activity_data = get_pr_activities(org_pulls_data)
+
+    process_pr_activity_data(repos_activity_data)
+    members_activity_data = get_all_members_activity_data(cached)
+    process_user_activity_data(
+        members_activity_data, repos_activity_data)
 
 
 if __name__ == "__main__":
-    main()
+    main(True)
