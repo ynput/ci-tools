@@ -19,7 +19,6 @@ The script should be run daily to obtain the following metrics:
 - Daily activity of any PR-related activity (except creating and merging own author PRs) per user.
 
 """
-from cProfile import label
 from hashlib import sha1
 import pytz
 import datetime
@@ -174,6 +173,7 @@ def get_all_pulls(cached=False):
     variables = {"orgName": ORG_NAME, "cursor": None}
 
     data_repos = {}
+    empty_repos = []
     while True:
         # Send the GraphQL request
         response_pulls = requests.post(
@@ -204,6 +204,7 @@ def get_all_pulls(cached=False):
                 or repo["node"]["isTemplate"]
                 or pr_count == 0
             ):
+                empty_repos.append(repo_name)
                 continue
 
             if repo_name not in data_repos:
@@ -257,6 +258,10 @@ def get_all_pulls(cached=False):
                 page_index += 1
             else:
                 break
+
+    # add empty repos keys into repos data
+    for repo in empty_repos:
+        data_repos[repo] = {}
 
     # save all captured data to json file for further analysis
     with open(JSON_FILE_REPOS, 'w') as outfile:
@@ -400,10 +405,13 @@ def get_event_data(member, event, repos_activity_data):
 
         matching_repo = True
 
-        if pr_data["number"] == str(github_number):
+        if str(pr_data["number"]) == str(github_number):
             matching_pr = pr_data
             break
 
+    # TODO: add data collection for case where it is pr but it is
+    # not in the list of prs - we need to query it from github api as merged
+    # and we need to add it to the list of prs
     if matching_pr:
         complexity_index = matching_pr["complexity_index"]
     else:
@@ -411,18 +419,18 @@ def get_event_data(member, event, repos_activity_data):
         complexity_index = None
 
     event_data = {
-        "repository": repo_full_name,
+        "user": member,
+        "subject_owner": subject_owner == member,
         "type": event["type"],
         "created_at": str(utc_local),
-        "user": member,
+        "repository": repo_full_name,
         "github_number": github_number,
         "github_url": github_url,
+        "activity_url": activity_url,
+        "org_activity": matching_repo,
         "is_pr": is_pr,
         "pr_activity_id": _id,
-        "subject_owner": subject_owner == member,
-        "activity_url": activity_url,
         "pr_complexity_index": complexity_index,
-        "org_activity": matching_repo
     }
 
     return event_data
