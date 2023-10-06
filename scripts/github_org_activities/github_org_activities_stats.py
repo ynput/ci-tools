@@ -437,14 +437,16 @@ def get_event_data(member, event, repos_activity_data):
 
 
 def get_pr_activities(org_pulls_data):
-    """Get all organisation pr activies as pandas dataframe
+    """Get all organization pr actives as pandas database
     """
     current_time = get_current_time()
     org_activity = {}
     for repo_name, pulls in org_pulls_data.items():
         for pull_number, pull_data in pulls.items():
             # convert pull_data to sha1 hash with 12 chars
-            _id = sha1(json.dumps(pull_data, sort_keys=True).encode('utf-8')).hexdigest()
+            _id = sha1(
+                json.dumps(pull_data, sort_keys=True).encode('utf-8')
+            ).hexdigest()
 
             # get all assignees number
             assignees_number = len(pull_data["assignees"]["edges"])
@@ -535,4 +537,4 @@ def main(cached=False):
 
 
 if __name__ == "__main__":
-    main(True)
+    main(False)
