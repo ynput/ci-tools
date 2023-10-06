@@ -28,6 +28,9 @@ from pprint import pprint
 from dotenv import load_dotenv
 import pandas as pd
 import requests
+import asyncio
+import aiohttp
+
 
 load_dotenv()
 
@@ -57,7 +60,7 @@ def utc_to_local(utc_dt):
     return LOCAL_TIMEZONE.normalize(local_dt)
 
 
-def get_all_pulls(cached=False):
+async def get_all_pulls(cached=False):
     if os.path.exists(JSON_FILE_REPOS) and cached:
         print("cached pulls data --------------")
         with open(JSON_FILE_REPOS) as json_file:
@@ -172,102 +175,129 @@ def get_all_pulls(cached=False):
     # Define the variables for the GraphQL query
     variables = {"orgName": ORG_NAME, "cursor": None}
 
+    async_tasks = []
     data_repos = {}
     empty_repos = []
-    while True:
-        # Send the GraphQL request
-        response_pulls = requests.post(
-            "https://api.github.com/graphql",
-            json={"query": query_repos, "variables": variables},
-            headers=HEADERS
-        )
-        if (
-                response_pulls.json()["data"] is None
-                and "errors" in response_pulls.json()
-        ):
-            print(response_pulls.json())
-            break
+    async with aiohttp.ClientSession() as session:
 
-        response_json = response_pulls.json()
-        repos_data = response_json["data"]["organization"]["repositories"]
-
-        # Parse the response
-        _data_page = repos_data["edges"]
-
-        for repo in _data_page:
-            repo_name = repo["node"]["name"]
-            pr_count = repo["node"]["pullRequests"]["totalCount"]
-            # skip if repo is archived, locked or template or it has no PRs
-            if (
-                repo["node"]["isArchived"]
-                or repo["node"]["isLocked"]
-                or repo["node"]["isTemplate"]
-                or pr_count == 0
-            ):
-                empty_repos.append(repo_name)
-                continue
-
-            if repo_name not in data_repos:
-                data_repos[repo_name] = {}
-                print(
-                    f"Adding repo '{repo_name}' for rather processing. "
-                    f"'{pr_count}' pullrequests in total."
-                )
-
-        # Check if there are more pages
-        page_info = repos_data["pageInfo"]
-
-        if page_info["hasNextPage"]:
-            variables["cursor"] = page_info["endCursor"]
-        else:
-            break
-
-    # iterate all repos in data_repos and get all pulls via
-    # graphql query `query_pulls`
-    for repo in data_repos:
-        page_index = 0
-        variables = {"orgName": ORG_NAME, "repoName": repo, "cursor": None}
-        while True:
-            print("-" * 20 + "> " + f"{repo} > page: {page_index}")
+        has_next_page = True
+        while has_next_page:
             # Send the GraphQL request
-            response_pulls = requests.post(
+            async with session.post(
                 "https://api.github.com/graphql",
-                json={"query": query_pulls, "variables": variables},
+                json={"query": query_repos, "variables": variables},
                 headers=HEADERS
+            ) as response:
+
+                response_json = await response.json()
+                print(response_json)
+
+                if (
+                        response_json["data"] is None
+                        and "errors" in response_json
+                ):
+                    print(response_json)
+                    break
+
+                repos_data = response_json["data"]["organization"]["repositories"]
+
+                # Parse the response
+                _data_page = repos_data["edges"]
+
+                for repo in _data_page:
+                    repo_name = repo["node"]["name"]
+                    pr_count = repo["node"]["pullRequests"]["totalCount"]
+                    # skip if repo is archived, locked or template or it has no PRs
+                    if (
+                        repo["node"]["isArchived"]
+                        or repo["node"]["isLocked"]
+                        or repo["node"]["isTemplate"]
+                        or pr_count == 0
+                    ):
+                        empty_repos.append(repo_name)
+                        continue
+
+                    if repo_name not in data_repos:
+                        data_repos[repo_name] = {}
+                        print(
+                            f"Adding repo '{repo_name}' for rather processing. "
+                            f"'{pr_count}' pullrequests in total."
+                        )
+
+                # Check if there are more pages
+                page_info = repos_data["pageInfo"]
+                has_next_page = page_info['hasNextPage']
+
+                if has_next_page:
+                    variables["cursor"] = page_info["endCursor"]
+
+        print(">>>>>>>>>>> data_repos: ", data_repos)
+        # iterate all repos in data_repos and get all pulls via
+        # graphql query `query_pulls`
+        for repo in data_repos:
+            async_tasks.append(
+                asyncio.ensure_future(
+                    _get_pull_data_from_repo(
+                        query_pulls,
+                        data_repos,
+                        session,
+                        repo
+                    )
+                )
             )
 
+        # execute all tasks and get answers
+        await asyncio.gather(*async_tasks)
+
+        # add empty repos keys into repos data
+        for repo in empty_repos:
+            data_repos[repo] = {}
+
+        # save all captured data to json file for further analysis
+        with open(JSON_FILE_REPOS, 'w') as outfile:
+            json.dump(data_repos, outfile, indent=4)
+
+        return data_repos
+
+
+async def _get_pull_data_from_repo(query_pulls, data_repos, session, repo):
+    page_index = 0
+    variables = {"orgName": ORG_NAME, "repoName": repo, "cursor": None}
+    has_next_page = True
+    while has_next_page:
+        print("-" * 20 + "> " + f"{repo} > page: {page_index}")
+        # Send the GraphQL request
+
+        async with session.post(
+            "https://api.github.com/graphql",
+            json={"query": query_pulls, "variables": variables},
+            headers=HEADERS
+        ) as response:
+            response_json = await response.json()
+
             if (
-                response_pulls.json()["data"] is None
-                and "errors" in response_pulls.json()
+                response_json["data"] is None
+                and "errors" in response_json
             ):
-                print(response_pulls.json())
+                print(response_json)
                 break
 
             # Parse the response
-            data = response_pulls.json()["data"]["organization"]["repository"]["pullRequests"]["edges"]
-            for pull in data:
+            repository_data = response_json["data"]["organization"]["repository"]
+            pulls_data = repository_data["pullRequests"]["edges"]
+            for pull in pulls_data:
                 pull_number = pull["node"]["number"]
 
                 data_repos[repo][pull_number] = pull["node"]
                 print(f"{repo}: {pull_number}")
 
             # Check if there are more pages
-            page_info = response_pulls.json()["data"]["organization"]["repository"]["pullRequests"]["pageInfo"]
-            if page_info["hasNextPage"]:
+            page_info = repository_data["pullRequests"]["pageInfo"]
+            has_next_page = page_info['hasNextPage']
+
+            if has_next_page:
                 variables["cursor"] = page_info["endCursor"]
                 page_index += 1
-            else:
-                break
-
-    # add empty repos keys into repos data
-    for repo in empty_repos:
-        data_repos[repo] = {}
-
-    # save all captured data to json file for further analysis
-    with open(JSON_FILE_REPOS, 'w') as outfile:
-        json.dump(data_repos, outfile, indent=4)
-
-    return data_repos
 
 
 def get_all_members_activity_data(cached=False):
@@ -526,8 +556,8 @@ def write_activity_to_csv(activity, filepath):
     return df.to_dict("index")
 
 
-def main(cached=False):
-    org_pulls_data = get_all_pulls(cached)
+async def main(cached=False):
+    org_pulls_data = await get_all_pulls(cached)
     repos_activity_data = get_pr_activities(org_pulls_data)
 
     process_pr_activity_data(repos_activity_data)
@@ -537,4 +567,6 @@ def main(cached=False):
 
 
 if __name__ == "__main__":
-    main(False)
+    asyncio.run(
+        main(False)
+    )
