@@ -234,16 +234,17 @@ def _update_github_issues_json_file(issues, update=False):
     print(f"Github issues amount: {len(issues)}")
 
     if update:
-        # Load json data from file
-        with open(JSON_ISSUES_FILE_PATH, 'r') as file:
-            issues_data = json.load(file)
+        if os.path.exists(JSON_ISSUES_FILE_PATH):
+            # Load json data from file
+            with open(JSON_ISSUES_FILE_PATH, 'r') as file:
+                issues_data = json.load(file)
 
-        # Update json data
-        issues_data.update(issues)
+            # Update json data
+            issues_data.update(issues)
 
-        # Save text to temporary file
-        with open(JSON_ISSUES_FILE_PATH, 'w') as file:
-            json.dump(issues_data, file, indent=4)
+            # Save text to temporary file
+            with open(JSON_ISSUES_FILE_PATH, 'w') as file:
+                json.dump(issues_data, file, indent=4)
     else:
         # Dump json data into file
         with open(JSON_ISSUES_FILE_PATH, 'w') as file:
