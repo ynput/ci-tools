@@ -113,6 +113,8 @@ async def _get_github_issue_data(session, issue_number):
 
         # Retrieve the pull requests from the response data
         issue_data = returned_data['data']['repository']['issue']
+        assert issue_data, f"Error: Issue {issue_number} not found"
+
         print(f"Collected Issue: {issue_data['number']}")
         return issue_data
 
@@ -347,6 +349,50 @@ async def _get_clickup_task(
     return response
 
 
+async def _get_one_each_clickup_tasks(
+        session):
+
+    if os.path.exists(JSON_TASKS_FILE_PATH):
+        with open(JSON_TASKS_FILE_PATH, 'r') as file:
+            return json.load(file)
+
+    # get all lists ids from folder id
+    lists_ids = await _get_clickup_folder_list_ids(session, CTX.folder_id)
+    print(f"ClickUp lists: {lists_ids}")
+
+    tasks_all = {}
+    for list_id, list_name in lists_ids.items():
+        print(f"Processing List: {list_name}")
+
+        query = {
+            "archived": "false",
+            "subtasks": "false",
+            "include_closed": "false",
+            "page": "0",
+        }
+
+        url = (
+            f"https://api.clickup.com/api/v2/list/{list_id}/task")
+
+        response = await _get_clickup_request(session, url, query)
+
+        if "error" in response:
+            print(f"Error: {response['error']}")
+            return
+        elif "err" in response:
+            print(f"Error: {response['err']}")
+            return
+
+        # Process the current page results
+        tasks_page = {task["name"]: task for task in response["tasks"]}
+        print(f"Collected Tasks {len(tasks_page)}")
+        tasks_all.update(tasks_page)
+
+    _update_clickup_tasks_json_file(tasks_all)
+
+    return tasks_all
+
+
 async def _get_all_clickup_tasks(
         session):
 
@@ -425,8 +471,8 @@ def _get_clickup_url_id(cu_id_tag):
 
 
 def _get_clickup_custom_id(cu_id_tag):
-    """Get OP- patter from cuID tag."""
-    found = re.findall(r"OP-\d{4}", cu_id_tag)
+    """Get AY- or OP- patter from cuID tag."""
+    found = re.findall(r"AY-\d+|OP-\d+", cu_id_tag)
     return found.pop() if found else None
 
 
@@ -853,7 +899,7 @@ async def sync_single_issue_to_clickup(
     # get issue data from github via request
     async with aiohttp.ClientSession() as session:
         # check if the issue title is not already created in clickup tasks
-        CTX.clickup_tasks = await _get_all_clickup_tasks(session)
+        CTX.clickup_tasks = await _get_one_each_clickup_tasks(session)
         print(f"ClickUp tasks amount: {len(CTX.clickup_tasks)}")
 
         _aggregate_custom_attributes(CTX.clickup_tasks.values())
@@ -868,13 +914,6 @@ async def sync_single_issue_to_clickup(
 
         # execute all tasks and get answers
         await asyncio.gather(*async_tasks)
-
-        # updating json cache file
-        _update_github_issues_json_file(
-            {issue_number: issue_data},
-            update=True
-        )
-        _update_clickup_tasks_json_file(CTX.clickup_tasks)
 
 
 async def _clickup_task_manage(
@@ -892,7 +931,7 @@ async def _clickup_task_manage(
             # skip this issue since it is done
             return
 
-        # check if cuID is in regex pattern `/OP-.+/g`
+        # check if cuID is in regex pattern `/AY or OP-.+/g`
         cu_id_custom = _get_clickup_custom_id(cu_id_tag)
         print(f"cuID Custom: {cu_id_custom}")
 
@@ -1038,12 +1077,6 @@ async def sync_issues_to_clickup(
     )
 )
 @click.option(
-    "--issue-number",
-    type=int,
-    required=False,
-    help="particular issue number to sync (optional)"
-)
-@click.option(
     "--from-issue-number",
     type=int,
     required=False,
@@ -1062,7 +1095,6 @@ async def sync_issues_to_clickup(
     help="Remove temporary files (optional)"
 )
 def sync_issues(
-    issue_number,
     from_issue_number,
     to_issue_number,
     remove_temp_files,
@@ -1079,24 +1111,65 @@ def sync_issues(
         if remove_temp_files and os.path.exists(JSON_TASKS_FILE_PATH):
             os.remove(JSON_TASKS_FILE_PATH)
 
-    if issue_number:
-        print(f"Syncing issue: {issue_number}")
-        asyncio.run(
-            sync_single_issue_to_clickup(
-                issue_number
-            )
+    print(f"Syncing issues: {from_issue_number} - {to_issue_number}")
+    asyncio.run(
+        sync_issues_to_clickup(
+            from_issue_number=from_issue_number,
+            to_issue_number=to_issue_number,
         )
-    else:
-        print(f"Syncing issues: {from_issue_number} - {to_issue_number}")
-        asyncio.run(
-            sync_issues_to_clickup(
-                from_issue_number=from_issue_number,
-                to_issue_number=to_issue_number,
-            )
-        )
+    )
 
     print("Done")
 
+
+
+@click.command(
+    name="sync-single-issue",
+    help=(
+        "Sync single issue from Github to Clickup"
+    )
+)
+@click.option(
+    "--issue-number",
+    type=int,
+    required=False,
+    help="particular issue number to sync (optional)"
+)
+@click.option(
+    "--repo-owner",
+    type=str,
+    required=False,
+    help="Github repository owner (optional)"
+)
+@click.option(
+    "--repo-name",
+    type=str,
+    required=False,
+    help="Github repository name (optional)"
+)
+def sync_single_issue(
+    issue_number,
+    repo_owner=None,
+    repo_name=None,
+):
+    # to avoid: `RuntimeError: Event loop is closed` on Windows
+    if platform.platform().startswith("Windows"):
+        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
+    if repo_owner:
+        CTX.repo_owner = repo_owner
+
+    if repo_name:
+        CTX.repo_name = repo_name
+
+    print(f"Syncing issue: {issue_number}")
+    asyncio.run(
+        sync_single_issue_to_clickup(
+            issue_number
+        )
+    )
+
+    print("Done")
 
 @click.group()
 def cli():
@@ -1104,6 +1177,7 @@ def cli():
 
 
 cli.add_command(sync_issues)
+cli.add_command(sync_single_issue)
 
 if __name__ == '__main__':
     cli()
