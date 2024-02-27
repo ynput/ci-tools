@@ -1,0 +1,126 @@
+name: Sync Issues to ClickUp [ref]
+
+on:
+  workflow_dispatch:
+    inputs:
+      issue-number:
+        required: true
+        type: string
+      repo-owner:
+        required: true
+      repo-name:
+        required: true
+
+  workflow_call:
+    inputs:
+      issue-number:
+        required: true
+        type: string
+      repo-owner:
+        required: true
+        type: string
+      repo-name:
+        required: true
+        type: string
+    secrets:
+      token:
+        required: true
+      cu_api_key:
+        required: true
+      cu_team_id:
+        required: true
+      cu_folder_id:
+        required: true
+      cu_list_id:
+        required: true
+      cu_field_domain_id:
+        required: true
+      cu_field_type_id:
+        required: true
+
+jobs:
+  issue-to-clickup:
+    runs-on: ubuntu-latest
+    env:
+      ci-tools-workdir: /home/runner/work/ci-tools
+    steps:
+      #----------------------------------------------
+      # switch between secret inputs
+      #----------------------------------------------
+      - name: Set secret switch
+        uses: haya14busa/action-cond@v1
+        id: secretToken
+        with:
+          cond: ${{ secrets.token != '' }}
+          if_true: ${{ secrets.token }}
+          if_false: ${{ secrets.YNPUT_BOT_TOKEN }}
+
+      #----------------------------------------------
+      # set environment for github token and repo
+      #----------------------------------------------
+      - name: Set Environment vars
+        run: |
+          echo "GITHUB_TOKEN=${{ steps.secretToken.outputs.value }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY_OWNER=${{ inputs.repo-owner }}" >> $GITHUB_ENV
+          echo "GITHUB_REPOSITORY_NAME=${{ inputs.repo-name }}" >> $GITHUB_ENV
+          echo "CLICKUP_API_KEY=${{secrets.cu_api_key}}" >> $GITHUB_ENV
+          echo "CLICKUP_TEAM_ID=${{secrets.cu_team_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_LIST_ID=${{secrets.cu_list_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_FOLDER_ID=${{secrets.cu_folder_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_DOMAIN_FIELD_ID=${{secrets.cu_field_domain_id}}" >> $GITHUB_ENV
+          echo "CLICKUP_ISSUETYPE_FIELD_ID=${{secrets.cu_field_type_id}}" >> $GITHUB_ENV
+
+      #----------------------------------------------
+      #      check out to ci tools repo
+      #----------------------------------------------
+      - name: Checkout CI Tools repo
+        uses: actions/checkout@v3
+        with:
+          repository: ynput/ci-tools
+          ref: main
+          path: ./ci-tools
+
+      #----------------------------------------------
+      # set-up python
+      #----------------------------------------------
+      - name: Set up python
+        id: setup-python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11.5'
+
+      #----------------------------------------------
+      # move ci tools cloned files to different folder
+      #----------------------------------------------
+      - name: Move CI Tools work dir content
+        run: |
+          mv ${{ github.workspace }}/ci-tools/scripts/github_issues_management ${{ env.ci-tools-workdir }}
+          cd "${{ env.ci-tools-workdir }}"
+          ls -l
+
+      #----------------------------------------------
+      # install & configure poetry
+      #----------------------------------------------
+      - name: Install Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          installer-parallel: true
+
+      #----------------------------------------------
+      # install dependencies if cache does not exist
+      #----------------------------------------------
+      - name: Install dependencies
+        run: poetry --directory=${{ env.ci-tools-workdir }} install --no-interaction
+
+      #----------------------------------------------
+      # check if a commit is added to input milestone
+      #----------------------------------------------
+      - name: Sync issue to clickup
+        id: sync-to-clickup
+        run: |
+          source ${{ env.ci-tools-workdir }}/.venv/bin/activate
+          output=$(python ${{ env.ci-tools-workdir }}/github_issues_to_clickup.py sync-single-issue --issue-number=${{ inputs.issue-number }} --repo-owner=${{ inputs.repo-owner }} --repo-name=${{ inputs.repo-name }})
+          echo "${output}"
+        shell: bash
