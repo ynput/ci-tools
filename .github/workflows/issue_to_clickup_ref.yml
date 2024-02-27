@@ -69,6 +69,9 @@ jobs:
           echo "CLICKUP_FOLDER_ID=${{secrets.cu_folder_id}}" >> $GITHUB_ENV
           echo "CLICKUP_DOMAIN_FIELD_ID=${{secrets.cu_field_domain_id}}" >> $GITHUB_ENV
           echo "CLICKUP_ISSUETYPE_FIELD_ID=${{secrets.cu_field_type_id}}" >> $GITHUB_ENV
+          echo ${{ inputs.issue-number }}
+          echo ${{ inputs.repo-owner }}
+          echo ${{ inputs.repo-name }}
 
       #----------------------------------------------
       #      check out to ci tools repo
@@ -77,7 +80,7 @@ jobs:
         uses: actions/checkout@v3
         with:
           repository: ynput/ci-tools
-          ref: main
+          ref: develop
           path: ./ci-tools
 
       #----------------------------------------------
