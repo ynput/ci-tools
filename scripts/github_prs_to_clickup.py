@@ -155,7 +155,7 @@ async def set_release_names_to_clickup(
 
     # Return the latest release tag name
     clickup_custom_id = None
-    found = re.findall(r"OP-\d{4}", pr_head_ref)
+    found = re.findall(r"AY-\d+|OP-\d+", pr_head_ref)
     if found:
         clickup_custom_id = found.pop()
         print(f"Found Clickup ID {clickup_custom_id}")

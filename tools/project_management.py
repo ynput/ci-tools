@@ -160,7 +160,7 @@ async def milestone_prs_to_clickup(context, milestone):
         for pr_ in milestone_prs_proc.pulls:
             printer.echo("__________________")
             clickup_custom_id = None
-            found = re.findall(r"OP-\d{4}", pr_.head_ref)
+            found = re.findall(r"AY-\d+|OP-\d+", pr_.head_ref)
             if found:
                 clickup_custom_id = found.pop()
                 printer.echo(f"Found Clickup ID {clickup_custom_id}")
