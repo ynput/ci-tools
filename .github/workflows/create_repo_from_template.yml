@@ -22,7 +22,7 @@ jobs:
           fi
 
       - name: Create new Repo ${{ env.TARGET_REPO }} from template ${{ env.TEMPLATE_REPO }}
-        if: steps.repo-check.outputs 
+        if: success()
         run: |
           gh repo create ${{ env.TARGET_REPO }} --template ${{ env.TEMPLATE_REPO }}
         
