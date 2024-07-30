@@ -1,0 +1,28 @@
+name: Create Repo from template
+
+on:
+  workflow_dispatch:
+
+env:
+  GH_TOKEN: ${{ secrets.YNPUT_BOT_TOKEN }}
+  TARGET_REPO: "ynput/ayon-addon-action-testing"
+  TEMPLATE_REPO: "ynput/ayon-addon-template"
+
+jobs:
+  get-existing-releases:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check for existing repo
+        id: repo-check
+        run: |
+          if [ gh repo view ${{ env.TARGET_REPO }} > /dev/null 2>&1 ]; then
+            echo "::error::Repository already  exists - aborting creation."
+            exit 1
+          fi
+
+      - name: Create new Repo ${{ env.TARGET_REPO }} from template ${{ env.TEMPLATE_REPO }}
+        if: steps.repo-check.outputs 
+        run: |
+          gh repo create ${{ env.TARGET_REPO }} --template ${{ env.TEMPLATE_REPO }}
+        
